@@ -38,7 +38,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return () => subscription.unsubscribe();
   }, []);
 
+  const bootstrapUser = async (fullName?: string) => {
+    const { error } = await supabase.rpc('bootstrap_current_user', {
+      _full_name: fullName ?? null,
+    });
+    if (error) {
+      console.error('Error bootstrapping user:', error);
+    }
+  };
+
   const signUp = async (email: string, password: string, fullName?: string) => {
+
     const redirectUrl = `${window.location.origin}/`;
     
     const { data, error } = await supabase.auth.signUp({
