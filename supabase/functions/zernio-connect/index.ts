@@ -47,6 +47,58 @@ function randomHex(bytes: number): string {
   return Array.from(arr).map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
+function extractWebhooks(data: any): any[] {
+  const raw = data?.webhooks ?? data?.data?.webhooks ?? data?.data ?? data ?? [];
+  return Array.isArray(raw) ? raw : [raw].filter(Boolean);
+}
+
+/**
+ * Garante que a conta Zernio tenha um webhook apontando para ESTE projeto com
+ * todos os eventos e com o secret que temos salvo. Necessário porque a conta
+ * Zernio é reaproveitada entre projetos (remix): o webhook pode estar apontando
+ * para outra instalação e nenhuma mensagem chega aqui.
+ */
+// deno-lint-ignore no-explicit-any
+async function ensureWebhook(supabase: any, apiKey: string, settings: any, supabaseUrl: string) {
+  const ourUrl = `${supabaseUrl}/functions/v1/zernio-webhook`;
+  const list = await zernioFetch(apiKey, '/webhooks/settings');
+  const webhooks = list.ok ? extractWebhooks(list.data) : [];
+  const mine = webhooks.find((w: any) => (w?.url ?? '') === ourUrl);
+
+  const eventsOk = (w: any) => WEBHOOK_EVENTS.every((e) => (w?.events ?? []).includes(e));
+  if (mine && settings.zernio_webhook_secret && settings.zernio_webhook_id === (mine._id ?? mine.id) && eventsOk(mine) && mine.isActive !== false) {
+    return { ok: true, webhookId: settings.zernio_webhook_id, repaired: false };
+  }
+
+  // Estado divergente: remove o nosso antigo (se houver) e recria com secret novo
+  const staleId = mine?._id ?? mine?.id ?? null;
+  if (staleId) {
+    await zernioFetch(apiKey, `/webhooks/settings/${staleId}`, { method: 'DELETE' });
+  }
+
+  const secret = randomHex(32);
+  const created = await zernioFetch(apiKey, '/webhooks/settings', {
+    method: 'POST',
+    body: JSON.stringify({
+      name: 'Nina SDR',
+      url: ourUrl,
+      secret,
+      events: WEBHOOK_EVENTS,
+      isActive: true,
+    }),
+  });
+  const webhookId = created.data?.webhook?._id ?? created.data?.data?._id ?? created.data?._id ?? null;
+  if (!webhookId) return { ok: false, error: created.data };
+
+  await supabase
+    .from('nina_settings')
+    .update({ zernio_webhook_id: webhookId, zernio_webhook_secret: secret })
+    .eq('id', settings.id);
+  settings.zernio_webhook_id = webhookId;
+  settings.zernio_webhook_secret = secret;
+  return { ok: true, webhookId, repaired: true };
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
