@@ -228,38 +228,21 @@ serve(async (req) => {
       const redirectUrl = String(body.redirectUrl ?? '');
       if (!redirectUrl) return json({ error: 'redirectUrl é obrigatório' }, 400);
 
-      // Garante webhook registrado ANTES de conectar (eventos fluem imediatamente)
-      let webhookId = settings.zernio_webhook_id;
-      if (!webhookId) {
-        const secret = randomHex(32);
-        const created = await zernioFetch(apiKey, '/webhooks/settings', {
-          method: 'POST',
-          body: JSON.stringify({
-            name: 'Nina SDR',
-            url: `${supabaseUrl}/functions/v1/zernio-webhook`,
-            secret,
-            events: WEBHOOK_EVENTS,
-            isActive: true,
-          }),
-        });
-        webhookId = created.data?.webhook?._id ?? created.data?._id ?? null;
-        if (!webhookId) {
-          // Webhooks message.* exigem o Inbox da Zernio (add-on nos planos
-          // fixos; incluso no usage-based) — sem ele a conexão não tem como funcionar
-          const zernioError = String(created.data?.error ?? '');
-          if (created.data?.code === 'feature_not_available' || zernioError.includes('Inbox access')) {
-            return json({
-              error:
-                'Sua conta Zernio precisa do plano usage-based — é o único que inclui WhatsApp e o Inbox, e as 2 primeiras contas conectadas são grátis. Troque em zernio.com/dashboard/billing ("Switch to usage-based pricing") e clique em Conectar de novo.',
-              code: 'zernio_inbox_required',
-            }, 400);
-          }
-          return json({ error: 'Falha ao registrar webhook na Zernio', details: created.data }, 500);
+      // Garante webhook registrado E apontando para este projeto
+      const ensured = await ensureWebhook(supabase, apiKey, settings, supabaseUrl);
+      if (!ensured.ok) {
+        // Webhooks message.* exigem o Inbox da Zernio (add-on nos planos
+        // fixos; incluso no usage-based) — sem ele a conexão não tem como funcionar
+        const details: any = ensured.error;
+        const zernioError = String(details?.error ?? '');
+        if (details?.code === 'feature_not_available' || zernioError.includes('Inbox access')) {
+          return json({
+            error:
+              'Sua conta Zernio precisa do plano usage-based — é o único que inclui WhatsApp e o Inbox, e as 2 primeiras contas conectadas são grátis. Troque em zernio.com/dashboard/billing ("Switch to usage-based pricing") e clique em Conectar de novo.',
+            code: 'zernio_inbox_required',
+          }, 400);
         }
-        await supabase
-          .from('nina_settings')
-          .update({ zernio_webhook_id: webhookId, zernio_webhook_secret: secret })
-          .eq('id', settings.id);
+        return json({ error: 'Falha ao registrar webhook na Zernio', details }, 500);
       }
 
       const params = new URLSearchParams({
