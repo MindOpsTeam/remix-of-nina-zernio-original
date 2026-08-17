@@ -105,7 +105,19 @@ serve(async (req) => {
         });
       }
 
-      // Check WhatsApp
+      // Check WhatsApp: a conexão pode vir pela Cloud API (credenciais da Meta)
+      // ou por um canal ativo do Zernio — as duas entregam mensagem, então
+      // qualquer uma delas conta como configurada.
+      const { data: activeChannels } = await supabase
+        .from('channel_connections')
+        .select('provider, username, display_name')
+        .eq('platform', 'whatsapp')
+        .eq('status', 'active')
+        .limit(1);
+      const activeChannel = (activeChannels ?? [])[0] as
+        | { provider: string; username: string | null; display_name: string | null }
+        | undefined;
+
       if (settings.whatsapp_access_token && settings.whatsapp_phone_number_id) {
         // Test WhatsApp API connection
         try {
@@ -139,14 +151,22 @@ serve(async (req) => {
             details: 'Erro de conexão com a API',
           });
         }
+      } else if (activeChannel) {
+        results.push({
+          component: 'whatsapp',
+          status: 'ok',
+          message: `WhatsApp conectado via ${activeChannel.provider}: ${activeChannel.username || activeChannel.display_name || 'Ativo'}`,
+          details: 'Templates da Meta exigem, além disso, as credenciais da Cloud API.',
+        });
       } else {
         results.push({
           component: 'whatsapp',
           status: 'error',
           message: 'WhatsApp não configurado',
-          details: 'Configure o token e Phone Number ID',
+          details: 'Conecte um canal em Configurações > Canais ou informe o token e Phone Number ID',
         });
       }
+
 
       // Check da única fonte de verdade do atendimento real.
       if (publishedAgent) {
