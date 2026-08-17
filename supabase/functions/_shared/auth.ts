@@ -46,11 +46,7 @@ export async function requireAuth(req: Request, corsHeaders: Record<string, stri
   const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
   if (serviceKey && token === serviceKey) return null;
 
-  const client = createClient(
-    Deno.env.get('SUPABASE_URL')!,
-    Deno.env.get('SUPABASE_ANON_KEY')!,
-  );
-  const { data, error } = await client.auth.getUser(token);
+  const { data, error } = await getUserFromToken(token);
   if (error || !data?.user) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), {
       status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
