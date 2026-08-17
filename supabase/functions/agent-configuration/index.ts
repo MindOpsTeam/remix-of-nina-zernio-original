@@ -143,7 +143,7 @@ serve(async (req) => {
         _compiled_prompt: compiled.prompt,
         _compiler_version: compiled.compilerVersion,
         _actor_user_id: userData.user.id,
-        _evaluation_run_id: evaluationRun.id,
+        _evaluation_run_id: evaluationRunId,
         _label: typeof body.label === 'string' ? body.label : null,
         _accepted_warnings: acceptedWarnings,
       },
