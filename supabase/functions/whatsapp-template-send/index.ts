@@ -72,7 +72,7 @@ serve(async (request) => {
       ? body.params.map((value: unknown) => String(value ?? '').slice(0, 500))
       : [];
     const contactIds: string[] = Array.isArray(body?.contactIds)
-      ? Array.from(new Set(body.contactIds.map((value: unknown) => String(value)))).slice(0, MAX_CONTACTS + 1)
+      ? Array.from(new Set<string>(body.contactIds.map((value: unknown) => String(value)))).slice(0, MAX_CONTACTS + 1)
       : [];
 
     if (!NAME_PATTERN.test(name)) return json(400, { error: 'Template inválido.', code: 'invalid_template' });
