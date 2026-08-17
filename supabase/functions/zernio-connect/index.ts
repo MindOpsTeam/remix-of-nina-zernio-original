@@ -147,6 +147,27 @@ serve(async (req) => {
 
 
     // ---------------------------------------------------------------
+    // Diagnóstico: mostra como o webhook está registrado na Zernio
+    // (sem expor secret) — usado para investigar mensagens que não chegam
+    if (action === 'webhook_info') {
+      const list = await zernioFetch(apiKey, '/webhooks/settings');
+      const raw = list.data?.webhooks ?? list.data?.data ?? list.data ?? [];
+      const arr = Array.isArray(raw) ? raw : [raw];
+      return json({
+        success: list.ok,
+        status: list.status,
+        storedWebhookId: settings.zernio_webhook_id,
+        webhooks: arr.map((w: any) => ({
+          id: w?._id ?? w?.id ?? null,
+          url: w?.url ?? null,
+          events: w?.events ?? null,
+          isActive: w?.isActive ?? null,
+        })),
+      });
+    }
+
+
+    // ---------------------------------------------------------------
     if (action === 'connect') {
       if (body.platform && body.platform !== 'whatsapp') {
         return json({ error: 'Apenas conexões com WhatsApp estão disponíveis' }, 400);
