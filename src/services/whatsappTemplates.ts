@@ -34,6 +34,11 @@ async function invokeTemplates(body: Record<string, unknown>): Promise<Record<st
   return data ?? {};
 }
 
+export interface TemplateSendResult {
+  queued: number;
+  skipped: Array<{ contactId: string; reason?: string }>;
+}
+
 export const whatsappTemplatesApi = {
   async list(): Promise<MetaTemplate[]> {
     const data = await invokeTemplates({ action: 'list' });
@@ -49,4 +54,36 @@ export const whatsappTemplatesApi = {
   async remove(name: string): Promise<void> {
     await invokeTemplates({ action: 'delete', name });
   },
+
+  /** Enfileira o template aprovado para os contatos escolhidos. */
+  async send(input: {
+    name: string;
+    language: string;
+    bodyText: string;
+    params: string[];
+    contactIds: string[];
+  }): Promise<TemplateSendResult> {
+    const { data, error } = await supabase.functions.invoke('whatsapp-template-send', { body: input });
+    if (error) {
+      let message = error.message || 'Não foi possível disparar o template.';
+      let code: string | null = null;
+      try {
+        const context = (error as { context?: { json?: () => Promise<unknown> } }).context;
+        const details = typeof context?.json === 'function'
+          ? await context.json() as { error?: string; code?: string }
+          : null;
+        if (details?.error) message = details.error;
+        if (details?.code) code = details.code;
+      } catch {
+        // Mantém a mensagem da SDK.
+      }
+      throw new WhatsAppTemplatesError(message, code);
+    }
+    if (data?.error) throw new WhatsAppTemplatesError(String(data.error), typeof data.code === 'string' ? data.code : null);
+    return {
+      queued: Number(data?.queued ?? 0),
+      skipped: Array.isArray(data?.skipped) ? data.skipped : [],
+    };
+  },
 };
+
