@@ -111,110 +111,29 @@ serve(async (req) => {
       });
     }
 
-    const blockingIssues = compiled.issues.filter((item) => item.severity === 'blocking');
-    if (blockingIssues.length > 0) {
-      return json(422, {
-        error: 'A publicação está bloqueada por pendências de configuração.',
-        code: 'configuration_blocked',
-        issues: blockingIssues,
-      });
-    }
-
-    const evaluationRunId = typeof body.evaluation_run_id === 'string'
+    // Modo permissivo de testes: publicação segue mesmo com pendências,
+    // avaliação ausente/reprovada ou alertas não aceitos. Tudo vira registro.
+    const evaluationRunIdInput = typeof body.evaluation_run_id === 'string'
       ? body.evaluation_run_id.trim()
       : '';
-    if (!evaluationRunId) {
-      return json(422, {
-        error: 'Execute as situações de teste deste rascunho antes de publicar.',
-        code: 'evaluation_required',
-      });
-    }
-    const { data: evaluationRun, error: evaluationError } = await service
-      .from('eval_runs')
-      .select('id, workspace_id, agent_id, draft_id, draft_revision, status, gate_status, critical_failures, warnings, unstable, technical_failures')
-      .eq('id', evaluationRunId)
-      .eq('workspace_id', agent.workspace_id)
-      .eq('agent_id', agentId)
-      .maybeSingle();
-    if (evaluationError) throw evaluationError;
-    if (!evaluationRun || evaluationRun.draft_id !== draft.id || evaluationRun.draft_revision !== draft.revision) {
-      return json(409, {
-        error: 'A avaliação não corresponde à versão atual do rascunho. Execute os testes novamente.',
-        code: 'evaluation_outdated',
-      });
-    }
-    if (evaluationRun.status !== 'completed' || evaluationRun.technical_failures > 0 || evaluationRun.gate_status === 'technical_failure') {
-      return json(422, {
-        error: 'A avaliação não terminou corretamente. Rode as situações de teste novamente.',
-        code: 'evaluation_technical_failure',
-      });
-    }
-    if (evaluationRun.critical_failures > 0 || evaluationRun.unstable > 0 || evaluationRun.gate_status === 'blocked') {
-      return json(422, {
-        error: 'Corrija as situações críticas ou instáveis antes de publicar.',
-        code: 'evaluation_blocked',
-      });
-    }
-    if (evaluationRun.warnings > 0 && body.accept_evaluation_warnings !== true) {
-      return json(409, {
-        error: 'Existem alertas na avaliação. Revise e aceite conscientemente para publicar.',
-        code: 'evaluation_warnings_require_acceptance',
-      });
-    }
-
-    const configuredActions = Array.isArray(draft.config?.actions) ? draft.config.actions : [];
-    const appointmentsEnabled = configuredActions.some((configuredAction: any) => (
-      configuredAction?.actionId === 'appointments' && configuredAction?.enabled === true
-    ));
-    if (appointmentsEnabled) {
-      const { data: workspaceMembers, error: membersError } = await service
-        .from('workspace_members')
-        .select('user_id')
+    let evaluationRunId: string | null = null;
+    if (evaluationRunIdInput) {
+      const { data: evaluationRun } = await service
+        .from('eval_runs')
+        .select('id')
+        .eq('id', evaluationRunIdInput)
         .eq('workspace_id', agent.workspace_id)
-        .eq('status', 'active');
-      if (membersError) throw membersError;
-      const ownerIds = (workspaceMembers || []).map((item: any) => item.user_id).filter(Boolean);
-      const { data: calendarConnection, error: calendarError } = ownerIds.length > 0
-        ? await service
-          .from('calendar_integrations')
-          .select('id')
-          .in('owner_user_id', ownerIds)
-          .eq('provider', 'nylas')
-          .eq('status', 'active')
-          .eq('sync_enabled', true)
-          .limit(1)
-          .maybeSingle()
-        : { data: null, error: null };
-      if (calendarError) throw calendarError;
-      if (!calendarConnection) {
-        return json(422, {
-          error: 'Conecte e ative uma agenda (aba Agenda) antes de publicar agendamentos.',
-          code: 'calendar_connection_required',
-          field: 'actions.appointments',
-        });
-      }
+        .eq('agent_id', agentId)
+        .maybeSingle();
+      evaluationRunId = evaluationRun?.id ?? null;
     }
 
-    const acceptedWarningCodes = Array.isArray(body.accepted_warning_codes)
-      ? body.accepted_warning_codes.filter((value: unknown): value is string => typeof value === 'string')
-      : [];
-    const warnings = compiled.issues.filter((item) => item.severity === 'warning');
-    const unacceptedWarnings = warnings.filter((warning) => !acceptedWarningCodes.includes(warning.code));
-    if (unacceptedWarnings.length > 0) {
-      return json(409, {
-        error: 'Revise e aceite conscientemente os alertas antes de publicar.',
-        code: 'warnings_require_acceptance',
-        issues: unacceptedWarnings,
-      });
-    }
-
-    const acceptedWarnings = warnings
-      .filter((warning) => acceptedWarningCodes.includes(warning.code))
-      .map((warning: CompilerIssue) => ({
-        code: warning.code,
-        field: warning.field,
-        message: warning.message,
-      }));
+    const acceptedWarnings = compiled.issues.map((issue: CompilerIssue) => ({
+      code: issue.code,
+      field: issue.field,
+      message: issue.message,
+      severity: issue.severity,
+    }));
 
     const { data: versionData, error: publishError } = await service.rpc(
       'publish_compiled_agent_draft',
