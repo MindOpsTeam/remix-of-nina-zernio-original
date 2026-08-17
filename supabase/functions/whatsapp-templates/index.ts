@@ -230,7 +230,7 @@ serve(async (request) => {
     // de erros do app com um 4xx esperado no primeiro carregamento.
     const infoStatus = action === 'list' ? 200 : 422;
 
-    const access = await resolveAccess(service, userData.user.id);
+    const access = await resolveAccess(service, userId);
     if (!access.isAdmin && !access.isEditor) {
       return json(action === 'list' ? 200 : 403, {
         error: 'Sem permissão para gerenciar templates.',
@@ -245,14 +245,14 @@ serve(async (request) => {
     if (access.workspaceId) {
       await consumeRateLimit(service, {
         workspaceId: access.workspaceId,
-        subjectKey: userData.user.id,
+        subjectKey: userId,
         operation: 'whatsapp_templates',
         maxRequests: 10,
         windowSeconds: 60,
       });
     }
 
-    const row = await resolveNinaWhatsAppRow(service, userData.user.id);
+    const row = await resolveNinaWhatsAppRow(service, userId);
     const hasCloudApi = Boolean(row?.whatsapp_access_token && row?.whatsapp_business_account_id);
 
     // Quem conectou o WhatsApp pela Zernio não tem token da Cloud API aqui: a
