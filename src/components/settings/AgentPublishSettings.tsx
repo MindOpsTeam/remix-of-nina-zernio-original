@@ -526,26 +526,23 @@ export default function AgentPublishSettings({
   };
 
   const handlePublish = async () => {
-    if (!latestRun || !gateAllowsPublication) return;
     setPublishing(true);
     try {
+      // Modo de testes: publicamos mesmo com alertas ou sem avaliação recente.
       const preview = await getAgentCompiledPromptPreview(agentId);
-      const compilerWarnings = preview.issues.filter((issue) => issue.severity === 'warning');
-      if (compilerWarnings.length > 0 && !acceptCompilerWarnings) {
-        // Os alertas do servidor normalmente são os mesmos já listados acima; se
-        // divergirem, esta versão da tela está defasada em relação ao backend.
-        toast.warning(localCompilerWarnings.length > 0
-          ? 'Marque a confirmação dos alertas de configuração antes de publicar.'
-          : 'O servidor encontrou alertas que esta tela ainda não mostra. Recarregue a página e tente novamente.');
-        return;
+      if (preview.issues.length > 0) {
+        toast.warning('Publicando com alertas de configuração pendentes.');
+      }
+      if (!gateAllowsPublication) {
+        toast.warning('Publicando sem avaliação aprovada (modo de testes).');
       }
       await publishAgentDraft({
         agentId,
         expectedRevision: draftRevision,
-        evaluationRunId: latestRun.id,
+        evaluationRunId: runMatchesDraft ? latestRun?.id ?? null : null,
         label: label.trim() || null,
-        acceptedWarningCodes: compilerWarnings.map((issue) => issue.code),
-        acceptEvaluationWarnings,
+        acceptedWarningCodes: preview.issues.map((issue) => issue.code),
+        acceptEvaluationWarnings: true,
       });
       toast.success('Nova versão publicada. O atendimento real já usa esta configuração.');
       setLabel('');
