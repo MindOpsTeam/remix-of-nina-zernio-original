@@ -48,31 +48,56 @@ export async function userCanEditAgent(
  * ativa ou o agente ainda não possuir versão publicada, o atendimento falha
  * de forma segura. Não existe fallback para prompt legado.
  */
-export async function fetchPublishedAgentRuntimeConfig(
+/**
+ * Resolve o workspace do atendimento. Arquitetura single-tenant: quando a
+ * conversa não tem dono (mensagem entrou por webhook), cai para o único
+ * workspace ativo do projeto em vez de falhar.
+ */
+async function resolveWorkspaceId(
   supabase: SupabaseQueryClient,
   userId: string | null | undefined,
-): Promise<PublishedAgentRuntimeConfig | null> {
-  if (!userId) return null;
+): Promise<string | null> {
+  if (userId) {
+    const { data: membership, error } = await supabase
+      .from('workspace_members')
+      .select('workspace_id')
+      .eq('user_id', userId)
+      .eq('status', 'active')
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    if (error) {
+      console.error('[AgentConfig] Failed to resolve workspace membership:', error);
+    } else if (membership?.workspace_id) {
+      return membership.workspace_id;
+    }
+  }
 
-  const { data: membership, error: membershipError } = await supabase
-    .from('workspace_members')
-    .select('workspace_id')
-    .eq('user_id', userId)
+  const { data: workspace, error: workspaceError } = await supabase
+    .from('workspaces')
+    .select('id')
     .eq('status', 'active')
     .order('created_at', { ascending: true })
     .limit(1)
     .maybeSingle();
-
-  if (membershipError) {
-    console.error('[AgentConfig] Failed to resolve workspace membership:', membershipError);
+  if (workspaceError) {
+    console.error('[AgentConfig] Failed to resolve fallback workspace:', workspaceError);
     return null;
   }
-  if (!membership?.workspace_id) return null;
+  return workspace?.id ?? null;
+}
+
+export async function fetchPublishedAgentRuntimeConfig(
+  supabase: SupabaseQueryClient,
+  userId: string | null | undefined,
+): Promise<PublishedAgentRuntimeConfig | null> {
+  const workspaceId = await resolveWorkspaceId(supabase, userId);
+  if (!workspaceId) return null;
 
   const { data: agent, error: agentError } = await supabase
     .from('agents')
     .select('id, published_version_id')
-    .eq('workspace_id', membership.workspace_id)
+    .eq('workspace_id', workspaceId)
     .neq('status', 'archived')
     .maybeSingle();
 
@@ -96,7 +121,7 @@ export async function fetchPublishedAgentRuntimeConfig(
   if (!version?.compiled_prompt) return null;
 
   return {
-    workspaceId: membership.workspace_id,
+    workspaceId,
     agentId: agent.id,
     versionId: version.id,
     versionNumber: version.version_number,
@@ -113,22 +138,13 @@ export async function fetchAgentDraftRuntimeConfig(
   supabase: SupabaseQueryClient,
   userId: string | null | undefined,
 ): Promise<DraftAgentRuntimeConfig | null> {
-  if (!userId) return null;
-
-  const { data: membership, error: membershipError } = await supabase
-    .from('workspace_members')
-    .select('workspace_id')
-    .eq('user_id', userId)
-    .eq('status', 'active')
-    .order('created_at', { ascending: true })
-    .limit(1)
-    .maybeSingle();
-  if (membershipError || !membership?.workspace_id) return null;
+  const workspaceId = await resolveWorkspaceId(supabase, userId);
+  if (!workspaceId) return null;
 
   const { data: agent, error: agentError } = await supabase
     .from('agents')
     .select('id')
-    .eq('workspace_id', membership.workspace_id)
+    .eq('workspace_id', workspaceId)
     .neq('status', 'archived')
     .maybeSingle();
   if (agentError || !agent?.id) return null;
@@ -141,7 +157,7 @@ export async function fetchAgentDraftRuntimeConfig(
   if (draftError || !draft?.id) return null;
 
   return {
-    workspaceId: membership.workspace_id,
+    workspaceId,
     agentId: agent.id,
     draftId: draft.id,
     revision: draft.revision,
