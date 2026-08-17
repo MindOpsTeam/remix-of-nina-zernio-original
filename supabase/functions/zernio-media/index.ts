@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { getUserFromToken } from '../_shared/auth.ts';
 
 // Proxy de mídia da Zernio: <img>/<audio>/<video> não mandam header
 // Authorization, e a URL de anexo da Zernio exige Bearer com a API key.
@@ -36,7 +37,7 @@ serve(async (req) => {
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const anonClient = createClient(supabaseUrl, Deno.env.get('SUPABASE_ANON_KEY')!);
-    const { data: userData, error: userError } = await anonClient.auth.getUser(token);
+    const { data: userData, error: userError } = await getUserFromToken(token);
     if (userError || !userData?.user) return jsonError('Unauthorized', 401);
 
     const supabase = createClient(supabaseUrl, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);

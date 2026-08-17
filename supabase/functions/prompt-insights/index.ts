@@ -6,6 +6,7 @@ import { LOVABLE_AI_URL } from "../_shared/nina-engine.ts";
 import { fetchAgentDraftRuntimeConfig, userCanEditAgent } from "../_shared/agent-config.ts";
 import { redactSensitiveText, redactSensitiveValue } from "../_shared/privacy.ts";
 import { consumeRateLimit, RateLimitError } from "../_shared/rate-limit.ts";
+import { getUserFromToken } from '../_shared/auth.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -43,7 +44,7 @@ serve(async (req) => {
     if (!authHeader) return json(401, { error: 'Unauthorized' });
     const token = authHeader.replace(/^Bearer\s+/i, '').trim();
     const authClient = createClient(supabaseUrl, anonKey);
-    const { data: userData, error: userError } = await authClient.auth.getUser(token);
+    const { data: userData, error: userError } = await getUserFromToken(token);
     if (userError || !userData.user) return json(401, { error: 'Unauthorized' });
     if (!await userCanEditAgent(service, userData.user.id)) {
       return json(403, { error: 'Sem permissão para analisar conversas' });

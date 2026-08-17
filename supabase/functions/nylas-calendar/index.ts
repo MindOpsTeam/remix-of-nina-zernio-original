@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { buildNylasEventPayload, parseNylasEvent } from '../_shared/nylas-events.ts';
+import { getUserFromToken } from '../_shared/auth.ts';
 
 // Contrato de ações da agenda (mesmas ações e mesmo shape
 // de status): o frontend e o orquestrador trocam de backend de agenda apenas
@@ -502,7 +503,7 @@ async function authenticate(req: Request, supabase: SupabaseClient) {
     Deno.env.get('SUPABASE_URL')!,
     Deno.env.get('SUPABASE_ANON_KEY')!,
   );
-  const { data, error } = await anonClient.auth.getUser(token);
+  const { data, error } = await getUserFromToken(token);
   if (error || !data?.user) return null;
   const { data: isAdmin } = await supabase.rpc('has_role', {
     _user_id: data.user.id,

@@ -32,6 +32,7 @@ import {
 } from "../_shared/action-policy.ts";
 import { consumeRateLimit, RateLimitError } from "../_shared/rate-limit.ts";
 import { redactSensitiveText, redactSensitiveValue } from "../_shared/privacy.ts";
+import { getUserFromToken } from '../_shared/auth.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -588,7 +589,7 @@ serve(async (req) => {
 
     const token = authHeader.replace('Bearer ', '').trim();
     const anonClient = createClient(supabaseUrl, Deno.env.get('SUPABASE_ANON_KEY')!);
-    const { data: userData, error: userError } = await anonClient.auth.getUser(token);
+    const { data: userData, error: userError } = await getUserFromToken(token);
     if (userError || !userData?.user) return jsonResponse(401, { error: 'Unauthorized' });
 
     if (!await userCanEditAgent(supabase, userData.user.id)) {

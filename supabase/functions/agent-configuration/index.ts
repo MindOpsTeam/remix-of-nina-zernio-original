@@ -1,6 +1,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
+import { getUserFromToken } from '../_shared/auth.ts';
 import {
   compileAgentPrompt,
   type CompilerIssue,
@@ -41,7 +42,7 @@ serve(async (req) => {
 
     const token = authHeader.replace(/^Bearer\s+/i, '').trim();
     const authClient = createClient(supabaseUrl, anonKey);
-    const { data: userData, error: userError } = await authClient.auth.getUser(token);
+    const { data: userData, error: userError } = await getUserFromToken(token);
     if (userError || !userData.user) return json(401, { error: 'Unauthorized' });
 
     const body = await req.json();

@@ -1,6 +1,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { renderTemplateText } from '../_shared/whatsapp-templates.ts';
+import { getUserFromToken } from '../_shared/auth.ts';
 
 /**
  * Disparo de templates aprovados para contatos selecionados.
@@ -60,7 +61,7 @@ serve(async (request) => {
     const token = authorization.replace(/^Bearer\s+/i, '').trim();
     const auth = createClient(supabaseUrl, anonKey);
     const service = createClient(supabaseUrl, serviceKey);
-    const { data: userData, error: userError } = await auth.auth.getUser(token);
+    const { data: userData, error: userError } = await getUserFromToken(token);
     if (userError || !userData.user) return json(401, { error: 'Unauthorized' });
 
     const body = await request.json().catch(() => ({}));
@@ -71,7 +72,7 @@ serve(async (request) => {
       ? body.params.map((value: unknown) => String(value ?? '').slice(0, 500))
       : [];
     const contactIds: string[] = Array.isArray(body?.contactIds)
-      ? Array.from(new Set(body.contactIds.map((value: unknown) => String(value)))).slice(0, MAX_CONTACTS + 1)
+      ? Array.from(new Set<string>(body.contactIds.map((value: unknown) => String(value)))).slice(0, MAX_CONTACTS + 1)
       : [];
 
     if (!NAME_PATTERN.test(name)) return json(400, { error: 'Template inválido.', code: 'invalid_template' });

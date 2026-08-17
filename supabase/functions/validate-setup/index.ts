@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { fetchPublishedAgentRuntimeConfig } from '../_shared/agent-config.ts';
+import { getUserFromToken } from '../_shared/auth.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -46,7 +47,7 @@ serve(async (req) => {
     if (!claimsError && claimsData?.claims?.sub) {
       userId = claimsData.claims.sub as string;
     } else {
-      const { data: userData } = await authClient.auth.getUser(token);
+      const { data: userData } = await getUserFromToken(token);
       userId = userData?.user?.id ?? null;
     }
 
