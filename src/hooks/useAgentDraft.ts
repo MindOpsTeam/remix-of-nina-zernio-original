@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import type { AgentConfig } from '@/domain/agent-config';
+import { createDefaultAgentConfig, type AgentConfig } from '@/domain/agent-config';
 import { formatConfigError } from '@/lib/configErrors';
 import {
   AgentDraftConflictError,
+  bootstrapAgentWorkspace,
   getCurrentAgentContext,
   listAgentVersions,
   saveAgentDraft,
