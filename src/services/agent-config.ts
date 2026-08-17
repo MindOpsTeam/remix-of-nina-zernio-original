@@ -249,6 +249,23 @@ export async function getCurrentAgentContext(): Promise<AgentContext | null> {
   };
 }
 
+/**
+ * Instalação nova (ou remix) não tem workspace/agente/rascunho: sem isto a tela
+ * de configurações abre vazia e o usuário não tem como criar nada pela UI.
+ */
+export async function bootstrapAgentWorkspace(
+  workspaceName: string,
+  config: AgentConfig,
+): Promise<void> {
+  const { error } = await agentDb.rpc('bootstrap_agent_workspace', {
+    _workspace_name: workspaceName,
+    _config: config as unknown as Json,
+  });
+  if (error) throwAgentError(error);
+}
+
+
+
 export async function saveAgentDraft(
   agentId: string,
   config: AgentConfig,
