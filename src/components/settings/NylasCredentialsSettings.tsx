@@ -26,9 +26,11 @@ const NylasCredentialsSettings: React.FC<NylasCredentialsSettingsProps> = ({ sta
   const [apiKey, setApiKey] = useState('');
   const [apiUri, setApiUri] = useState('https://api.us.nylas.com');
   const [saving, setSaving] = useState(false);
+  const [copiedRedirectUri, setCopiedRedirectUri] = useState(false);
 
   const configured = status?.credentialsSource === 'settings' || status?.credentialsSource === 'env';
   const fromEnv = status?.credentialsSource === 'env';
+  const redirectUri = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/nylas-calendar`;
 
   const handleSave = async () => {
     const id = clientId.trim();
