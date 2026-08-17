@@ -62,6 +62,136 @@ async function resolveAccess(service: any, userId: string) {
   return { isAdmin, isEditor: Boolean(editorMembership), workspaceId };
 }
 
+const ZERNIO_BASE = 'https://zernio.com/api/v1';
+
+interface ZernioContext {
+  apiKey: string;
+  accountId: string;
+}
+
+/**
+ * Credenciais do caminho Zernio: chave da API + conta de WhatsApp ativa.
+ * Só existe quando a pessoa conectou o canal em Configurações > Canais.
+ */
+// deno-lint-ignore no-explicit-any
+async function resolveZernioContext(service: any): Promise<ZernioContext | null> {
+  const [{ data: settings }, { data: channels }] = await Promise.all([
+    service.from('nina_settings').select('zernio_api_key').not('zernio_api_key', 'is', null).limit(1).maybeSingle(),
+    service
+      .from('channel_connections')
+      .select('zernio_account_id')
+      .eq('platform', 'whatsapp')
+      .eq('provider', 'zernio')
+      .eq('status', 'active')
+      .order('connected_at', { ascending: false })
+      .limit(1),
+  ]);
+  const apiKey = (settings as { zernio_api_key: string | null } | null)?.zernio_api_key ?? null;
+  const accountId = ((channels ?? []) as Array<{ zernio_account_id: string }>)[0]?.zernio_account_id ?? null;
+  if (!apiKey || !accountId) return null;
+  return { apiKey, accountId };
+}
+
+async function zernioFetch(context: ZernioContext, path: string, init: RequestInit = {}) {
+  const response = await fetch(`${ZERNIO_BASE}${path}`, {
+    ...init,
+    headers: {
+      Authorization: `Bearer ${context.apiKey}`,
+      'Content-Type': 'application/json',
+      ...(init.headers ?? {}),
+    },
+    signal: AbortSignal.timeout(20_000),
+  });
+  // deno-lint-ignore no-explicit-any
+  const data: any = await response.json().catch(() => ({}));
+  return { ok: response.ok, status: response.status, data };
+}
+
+/** Mesmas três ações, faladas com a Zernio em vez da Graph API. */
+async function handleViaZernio(
+  context: ZernioContext,
+  action: string,
+  body: Record<string, unknown>,
+): Promise<Response> {
+  const accountQuery = `accountId=${encodeURIComponent(context.accountId)}`;
+
+  if (action === 'list') {
+    const result = await zernioFetch(context, `/whatsapp/templates?${accountQuery}`);
+    if (!result.ok) {
+      console.error('[whatsapp-templates] zernio list error', result.status, JSON.stringify(result.data).slice(0, 500));
+      return json(200, {
+        error: String(result.data?.error ?? 'Não foi possível listar os templates pela Zernio.'),
+        code: 'zernio_list_failed',
+      });
+    }
+    const templates = (Array.isArray(result.data?.templates) ? result.data.templates : [])
+      .map(parseMetaTemplate)
+      .filter((template: unknown) => template !== null);
+    return json(200, { templates, provider: 'zernio' });
+  }
+
+  if (action === 'create') {
+    const raw = body.template && typeof body.template === 'object' ? body.template as Record<string, unknown> : {};
+    const draft: TemplateDraft = {
+      name: String(raw.name ?? '').trim().toLowerCase(),
+      category: (TEMPLATE_CATEGORIES as readonly string[]).includes(String(raw.category))
+        ? String(raw.category) as TemplateDraft['category']
+        : 'UTILITY',
+      language: String(raw.language ?? 'pt_BR'),
+      headerText: raw.headerText ? String(raw.headerText).slice(0, 200) : undefined,
+      bodyText: String(raw.bodyText ?? '').slice(0, 2_000),
+      footerText: raw.footerText ? String(raw.footerText).slice(0, 200) : undefined,
+      exampleValues: Array.isArray(raw.exampleValues) ? raw.exampleValues.map((value) => String(value).slice(0, 500)).slice(0, 20) : [],
+    };
+    const issues = validateTemplateDraft(draft);
+    if (issues.length > 0) {
+      return json(400, { error: issues[0].message, code: 'invalid_template', issues });
+    }
+    // A Zernio recebe os mesmos campos da Graph API, acrescidos do accountId;
+    // allow_category_change não faz parte do contrato dela.
+    const { allow_category_change: _ignored, ...payload } = buildCreatePayload(draft) as Record<string, unknown>;
+    const result = await zernioFetch(context, '/whatsapp/templates', {
+      method: 'POST',
+      body: JSON.stringify({ ...payload, accountId: context.accountId }),
+    });
+    if (!result.ok) {
+      console.error('[whatsapp-templates] zernio create error', result.status, JSON.stringify(result.data).slice(0, 500));
+      return json(422, {
+        error: String(result.data?.error ?? result.data?.message ?? 'A Zernio recusou a criação do template.'),
+        code: 'zernio_create_failed',
+      });
+    }
+    const created = (result.data?.template ?? {}) as Record<string, unknown>;
+    return json(200, {
+      template: {
+        id: typeof created.id === 'string' ? created.id : '',
+        status: typeof created.status === 'string' ? created.status : 'PENDING',
+        category: typeof created.category === 'string' ? created.category : draft.category,
+        name: typeof created.name === 'string' ? created.name : draft.name,
+      },
+      provider: 'zernio',
+    });
+  }
+
+  const name = String(body.name ?? '').trim();
+  if (!/^[a-z0-9_]+$/.test(name)) {
+    return json(400, { error: 'Nome de template inválido.', code: 'invalid_template_name' });
+  }
+  const result = await zernioFetch(context, `/whatsapp/templates/${encodeURIComponent(name)}?${accountQuery}`, {
+    method: 'DELETE',
+  });
+  if (!result.ok) {
+    console.error('[whatsapp-templates] zernio delete error', result.status, JSON.stringify(result.data).slice(0, 500));
+    return json(422, {
+      error: String(result.data?.error ?? 'Não foi possível excluir o template pela Zernio.'),
+      code: 'zernio_delete_failed',
+    });
+  }
+  return json(200, { success: true, provider: 'zernio' });
+}
+
+
+
 serve(async (request) => {
   if (request.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
   if (request.method !== 'POST') return json(405, { error: 'Método não permitido' });
@@ -113,13 +243,22 @@ serve(async (request) => {
     }
 
     const row = await resolveNinaWhatsAppRow(service, userData.user.id);
-    if (!row?.whatsapp_access_token) {
-      return json(infoStatus, {
-        error: 'Configure o token de acesso do WhatsApp Cloud na aba APIs antes de gerenciar templates.',
-        code: 'whatsapp_cloud_not_configured',
-      });
-    }
-    if (!row.whatsapp_business_account_id) {
+    const hasCloudApi = Boolean(row?.whatsapp_access_token && row?.whatsapp_business_account_id);
+
+    // Quem conectou o WhatsApp pela Zernio não tem token da Cloud API aqui: a
+    // Zernio fala com a WABA da conta conectada e expõe os mesmos templates
+    // (/v1/whatsapp/templates). Só cai para ela quando a Cloud API não está completa.
+    if (!hasCloudApi) {
+      const zernio = await resolveZernioContext(service);
+      if (zernio) {
+        return await handleViaZernio(zernio, action, body);
+      }
+      if (!row?.whatsapp_access_token) {
+        return json(infoStatus, {
+          error: 'Conecte o WhatsApp em Configurações > Canais (Zernio) ou informe o token do WhatsApp Cloud na aba APIs para gerenciar templates.',
+          code: 'whatsapp_cloud_not_configured',
+        });
+      }
       // A mesma linha que o whatsapp-sender usará no envio — sem WABA nela, o
       // certo é completar o registro, não cair para as credenciais de outra conta.
       return json(infoStatus, {
@@ -127,11 +266,13 @@ serve(async (request) => {
         code: 'whatsapp_cloud_not_configured',
       });
     }
+
     const graphHeaders = {
-      Authorization: `Bearer ${row.whatsapp_access_token}`,
+      Authorization: `Bearer ${row!.whatsapp_access_token}`,
       'Content-Type': 'application/json',
     };
-    const templatesUrl = `${GRAPH_API_URL}/${row.whatsapp_business_account_id}/message_templates`;
+    const templatesUrl = `${GRAPH_API_URL}/${row!.whatsapp_business_account_id}/message_templates`;
+
 
     if (action === 'list') {
       // A Graph API pagina por cursor; sem seguir paging.next, contas com mais
