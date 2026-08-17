@@ -1,0 +1,1 @@
+update public.nina_processing_queue set status='pending', error_message=null, processed_at=null, retry_count=0, scheduled_for=now() where status='failed' and error_message like 'Nenhuma versão publicada%';
