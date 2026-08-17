@@ -2611,6 +2611,10 @@ export type Database = {
       }
     }
     Functions: {
+      bootstrap_agent_workspace: {
+        Args: { _config: Json; _workspace_name: string }
+        Returns: undefined
+      }
       bootstrap_current_user: {
         Args: { _full_name?: string }
         Returns: undefined
