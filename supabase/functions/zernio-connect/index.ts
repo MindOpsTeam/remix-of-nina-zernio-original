@@ -47,6 +47,58 @@ function randomHex(bytes: number): string {
   return Array.from(arr).map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
+function extractWebhooks(data: any): any[] {
+  const raw = data?.webhooks ?? data?.data?.webhooks ?? data?.data ?? data ?? [];
+  return Array.isArray(raw) ? raw : [raw].filter(Boolean);
+}
+
+/**
+ * Garante que a conta Zernio tenha um webhook apontando para ESTE projeto com
+ * todos os eventos e com o secret que temos salvo. Necessário porque a conta
+ * Zernio é reaproveitada entre projetos (remix): o webhook pode estar apontando
+ * para outra instalação e nenhuma mensagem chega aqui.
+ */
+// deno-lint-ignore no-explicit-any
+async function ensureWebhook(supabase: any, apiKey: string, settings: any, supabaseUrl: string) {
+  const ourUrl = `${supabaseUrl}/functions/v1/zernio-webhook`;
+  const list = await zernioFetch(apiKey, '/webhooks/settings');
+  const webhooks = list.ok ? extractWebhooks(list.data) : [];
+  const mine = webhooks.find((w: any) => (w?.url ?? '') === ourUrl);
+
+  const eventsOk = (w: any) => WEBHOOK_EVENTS.every((e) => (w?.events ?? []).includes(e));
+  if (mine && settings.zernio_webhook_secret && settings.zernio_webhook_id === (mine._id ?? mine.id) && eventsOk(mine) && mine.isActive !== false) {
+    return { ok: true, webhookId: settings.zernio_webhook_id, repaired: false };
+  }
+
+  // Estado divergente: remove o nosso antigo (se houver) e recria com secret novo
+  const staleId = mine?._id ?? mine?.id ?? null;
+  if (staleId) {
+    await zernioFetch(apiKey, `/webhooks/settings/${staleId}`, { method: 'DELETE' });
+  }
+
+  const secret = randomHex(32);
+  const created = await zernioFetch(apiKey, '/webhooks/settings', {
+    method: 'POST',
+    body: JSON.stringify({
+      name: 'Nina SDR',
+      url: ourUrl,
+      secret,
+      events: WEBHOOK_EVENTS,
+      isActive: true,
+    }),
+  });
+  const webhookId = created.data?.webhook?._id ?? created.data?.data?._id ?? created.data?._id ?? null;
+  if (!webhookId) return { ok: false, error: created.data };
+
+  await supabase
+    .from('nina_settings')
+    .update({ zernio_webhook_id: webhookId, zernio_webhook_secret: secret })
+    .eq('id', settings.id);
+  settings.zernio_webhook_id = webhookId;
+  settings.zernio_webhook_secret = secret;
+  return { ok: true, webhookId, repaired: true };
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -147,6 +199,27 @@ serve(async (req) => {
 
 
     // ---------------------------------------------------------------
+    // Diagnóstico: mostra como o webhook está registrado na Zernio
+    // (sem expor secret) — usado para investigar mensagens que não chegam
+    if (action === 'webhook_info') {
+      const list = await zernioFetch(apiKey, '/webhooks/settings');
+      const raw = list.data?.webhooks ?? list.data?.data ?? list.data ?? [];
+      const arr = Array.isArray(raw) ? raw : [raw];
+      return json({
+        success: list.ok,
+        status: list.status,
+        storedWebhookId: settings.zernio_webhook_id,
+        webhooks: arr.map((w: any) => ({
+          id: w?._id ?? w?.id ?? null,
+          url: w?.url ?? null,
+          events: w?.events ?? null,
+          isActive: w?.isActive ?? null,
+        })),
+      });
+    }
+
+
+    // ---------------------------------------------------------------
     if (action === 'connect') {
       if (body.platform && body.platform !== 'whatsapp') {
         return json({ error: 'Apenas conexões com WhatsApp estão disponíveis' }, 400);
@@ -155,38 +228,21 @@ serve(async (req) => {
       const redirectUrl = String(body.redirectUrl ?? '');
       if (!redirectUrl) return json({ error: 'redirectUrl é obrigatório' }, 400);
 
-      // Garante webhook registrado ANTES de conectar (eventos fluem imediatamente)
-      let webhookId = settings.zernio_webhook_id;
-      if (!webhookId) {
-        const secret = randomHex(32);
-        const created = await zernioFetch(apiKey, '/webhooks/settings', {
-          method: 'POST',
-          body: JSON.stringify({
-            name: 'Nina SDR',
-            url: `${supabaseUrl}/functions/v1/zernio-webhook`,
-            secret,
-            events: WEBHOOK_EVENTS,
-            isActive: true,
-          }),
-        });
-        webhookId = created.data?.webhook?._id ?? created.data?._id ?? null;
-        if (!webhookId) {
-          // Webhooks message.* exigem o Inbox da Zernio (add-on nos planos
-          // fixos; incluso no usage-based) — sem ele a conexão não tem como funcionar
-          const zernioError = String(created.data?.error ?? '');
-          if (created.data?.code === 'feature_not_available' || zernioError.includes('Inbox access')) {
-            return json({
-              error:
-                'Sua conta Zernio precisa do plano usage-based — é o único que inclui WhatsApp e o Inbox, e as 2 primeiras contas conectadas são grátis. Troque em zernio.com/dashboard/billing ("Switch to usage-based pricing") e clique em Conectar de novo.',
-              code: 'zernio_inbox_required',
-            }, 400);
-          }
-          return json({ error: 'Falha ao registrar webhook na Zernio', details: created.data }, 500);
+      // Garante webhook registrado E apontando para este projeto
+      const ensured = await ensureWebhook(supabase, apiKey, settings, supabaseUrl);
+      if (!ensured.ok) {
+        // Webhooks message.* exigem o Inbox da Zernio (add-on nos planos
+        // fixos; incluso no usage-based) — sem ele a conexão não tem como funcionar
+        const details: any = ensured.error;
+        const zernioError = String(details?.error ?? '');
+        if (details?.code === 'feature_not_available' || zernioError.includes('Inbox access')) {
+          return json({
+            error:
+              'Sua conta Zernio precisa do plano usage-based — é o único que inclui WhatsApp e o Inbox, e as 2 primeiras contas conectadas são grátis. Troque em zernio.com/dashboard/billing ("Switch to usage-based pricing") e clique em Conectar de novo.',
+            code: 'zernio_inbox_required',
+          }, 400);
         }
-        await supabase
-          .from('nina_settings')
-          .update({ zernio_webhook_id: webhookId, zernio_webhook_secret: secret })
-          .eq('id', settings.id);
+        return json({ error: 'Falha ao registrar webhook na Zernio', details }, 500);
       }
 
       const params = new URLSearchParams({
@@ -203,7 +259,17 @@ serve(async (req) => {
     }
 
     // ---------------------------------------------------------------
+    // Reparo explícito do webhook (usado quando as mensagens não chegam)
+    if (action === 'repair_webhook') {
+      const ensured = await ensureWebhook(supabase, apiKey, settings, supabaseUrl);
+      if (!ensured.ok) return json({ error: 'Falha ao registrar webhook na Zernio', details: ensured.error }, 500);
+      return json({ success: true, webhookId: ensured.webhookId, repaired: ensured.repaired });
+    }
+
+    // ---------------------------------------------------------------
     if (action === 'sync') {
+      // Autocorreção: sync também reconcilia o webhook deste projeto
+      await ensureWebhook(supabase, apiKey, settings, supabaseUrl);
       const res = await zernioFetch(apiKey, '/accounts');
       if (!res.ok) return json({ error: `Falha ao listar contas (HTTP ${res.status})` }, 500);
       const accounts = res.data?.accounts ?? res.data?.data ?? [];
