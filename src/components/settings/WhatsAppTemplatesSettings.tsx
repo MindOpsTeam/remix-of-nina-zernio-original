@@ -26,6 +26,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { useCompanySettings } from '@/hooks/useCompanySettings';
 import { cn } from '@/lib/utils';
+import TemplateSendDialog from '@/components/settings/TemplateSendDialog';
 import { WhatsAppTemplatesError, whatsappTemplatesApi } from '@/services/whatsappTemplates';
 import {
   countBodyVariables,
