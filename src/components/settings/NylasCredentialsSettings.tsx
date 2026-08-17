@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ExternalLink, KeyRound, Loader2, Lock } from 'lucide-react';
+import { Check, Copy, ExternalLink, KeyRound, Loader2, Lock } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '../Button';
 import { Badge } from '../ui/badge';
