@@ -25,11 +25,7 @@ serve(async (req) => {
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
-    const authedSupabase = createClient(
-      Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_ANON_KEY')!,
-    );
-    const { data: authData, error: authError } = await authedSupabase.auth.getUser(
+    const { data: authData, error: authError } = await getUserFromToken(
       authHeader.replace('Bearer ', '')
     );
     if (authError || !authData?.user) {
