@@ -204,10 +204,20 @@ serve(async (request) => {
     const authorization = request.headers.get('authorization');
     if (!authorization) return json(401, { error: 'Unauthorized' });
     const token = authorization.replace(/^Bearer\s+/i, '').trim();
-    const auth = createClient(supabaseUrl, anonKey);
+    const auth = createClient(supabaseUrl, anonKey, {
+      global: { headers: { Authorization: `Bearer ${token}` } },
+    });
     const service = createClient(supabaseUrl, serviceKey);
-    const { data: userData, error: userError } = await auth.auth.getUser(token);
-    if (userError || !userData.user) return json(401, { error: 'Unauthorized' });
+
+    let userId: string | null = null;
+    const { data: claimsData, error: claimsError } = await auth.auth.getClaims(token);
+    if (!claimsError && claimsData?.claims?.sub) {
+      userId = claimsData.claims.sub as string;
+    } else {
+      const { data: userData } = await auth.auth.getUser(token);
+      userId = userData?.user?.id ?? null;
+    }
+    if (!userId) return json(401, { error: 'Unauthorized' });
 
     const body = await request.json();
     const action = typeof body.action === 'string' ? body.action : '';
