@@ -20,6 +20,7 @@ import {
   validateScheduleRequest,
 } from "../_shared/action-policy.ts";
 import { consumeRateLimit, RateLimitError } from "../_shared/rate-limit.ts";
+import { getUserFromToken } from '../_shared/auth.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -151,7 +152,7 @@ serve(async (req) => {
     }
     const token = authHeader.replace('Bearer ', '').trim();
     const anonClient = createClient(supabaseUrl, Deno.env.get('SUPABASE_ANON_KEY')!);
-    const { data: userData, error: userError } = await anonClient.auth.getUser(token);
+    const { data: userData, error: userError } = await getUserFromToken(token);
     if (userError || !userData?.user) {
       return new Response(JSON.stringify({ error: 'Unauthorized' }), {
         status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },

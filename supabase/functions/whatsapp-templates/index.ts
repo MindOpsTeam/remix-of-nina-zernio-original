@@ -3,6 +3,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { consumeRateLimit, RateLimitError } from '../_shared/rate-limit.ts';
 import { resolveNinaWhatsAppRow } from '../_shared/whatsapp-credentials.ts';
 import {
+import { getUserFromToken } from '../_shared/auth.ts';
   buildCreatePayload,
   parseMetaTemplate,
   validateTemplateDraft,
@@ -214,7 +215,7 @@ serve(async (request) => {
     if (!claimsError && claimsData?.claims?.sub) {
       userId = claimsData.claims.sub as string;
     } else {
-      const { data: userData } = await auth.auth.getUser(token);
+      const { data: userData } = await getUserFromToken(token);
       userId = userData?.user?.id ?? null;
     }
     if (!userId) return json(401, { error: 'Unauthorized' });

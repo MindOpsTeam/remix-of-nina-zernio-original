@@ -1,6 +1,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { resolveModelSettings } from '../_shared/llm.ts';
 import { fetchPublishedAgentRuntimeConfig } from '../_shared/agent-config.ts';
+import { getUserFromToken } from '../_shared/auth.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -30,7 +31,7 @@ Deno.serve(async (req) => {
     const authHeader = req.headers.get('authorization');
     if (authHeader) {
       const token = authHeader.replace('Bearer ', '');
-      const { data: { user } } = await supabase.auth.getUser(token);
+      const { data: { user } } = await getUserFromToken(token);
       userId = user?.id || null;
     }
 

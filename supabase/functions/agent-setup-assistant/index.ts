@@ -1,6 +1,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { consumeRateLimit, RateLimitError } from '../_shared/rate-limit.ts';
+import { getUserFromToken } from '../_shared/auth.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -176,7 +177,7 @@ serve(async (request) => {
 
     // Auth e carga do recurso em paralelo — nada é retornado antes das checagens.
     const [{ data: userData, error: userError }, { data: agent, error: agentError }] = await Promise.all([
-      auth.auth.getUser(token),
+      getUserFromToken(token),
       service.from('agents').select('id, workspace_id').eq('id', agentId).maybeSingle(),
     ]);
     if (userError || !userData.user) return json(401, { error: 'Unauthorized' });
