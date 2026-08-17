@@ -9,6 +9,7 @@ import Team from './components/Team';
 import Scheduling from './components/Scheduling';
 import Kanban from './components/Kanban';
 import Help from './components/Help';
+import SystemRoadmap from './components/SystemRoadmap';
 import Auth from './pages/Auth';
 import ProtectedRoute from './components/ProtectedRoute';
 
@@ -88,6 +89,7 @@ const App: React.FC = () => {
               <Route path="/scheduling" element={<Scheduling />} />
               <Route path="/team" element={<Team />} />
               <Route path="/help" element={<Help />} />
+              <Route path="/system-roadmap" element={<SystemRoadmap />} />
               <Route path="/settings" element={<Settings />} />
             </Route>
             
