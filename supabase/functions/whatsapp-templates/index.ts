@@ -138,10 +138,11 @@ serve(async (request) => {
     }
 
     const graphHeaders = {
-      Authorization: `Bearer ${row.whatsapp_access_token}`,
+      Authorization: `Bearer ${row!.whatsapp_access_token}`,
       'Content-Type': 'application/json',
     };
-    const templatesUrl = `${GRAPH_API_URL}/${row.whatsapp_business_account_id}/message_templates`;
+    const templatesUrl = `${GRAPH_API_URL}/${row!.whatsapp_business_account_id}/message_templates`;
+
 
     if (action === 'list') {
       // A Graph API pagina por cursor; sem seguir paging.next, contas com mais
