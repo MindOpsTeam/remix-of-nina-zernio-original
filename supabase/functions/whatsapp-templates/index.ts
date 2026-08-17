@@ -204,10 +204,20 @@ serve(async (request) => {
     const authorization = request.headers.get('authorization');
     if (!authorization) return json(401, { error: 'Unauthorized' });
     const token = authorization.replace(/^Bearer\s+/i, '').trim();
-    const auth = createClient(supabaseUrl, anonKey);
+    const auth = createClient(supabaseUrl, anonKey, {
+      global: { headers: { Authorization: `Bearer ${token}` } },
+    });
     const service = createClient(supabaseUrl, serviceKey);
-    const { data: userData, error: userError } = await auth.auth.getUser(token);
-    if (userError || !userData.user) return json(401, { error: 'Unauthorized' });
+
+    let userId: string | null = null;
+    const { data: claimsData, error: claimsError } = await auth.auth.getClaims(token);
+    if (!claimsError && claimsData?.claims?.sub) {
+      userId = claimsData.claims.sub as string;
+    } else {
+      const { data: userData } = await auth.auth.getUser(token);
+      userId = userData?.user?.id ?? null;
+    }
+    if (!userId) return json(401, { error: 'Unauthorized' });
 
     const body = await request.json();
     const action = typeof body.action === 'string' ? body.action : '';
@@ -220,7 +230,7 @@ serve(async (request) => {
     // de erros do app com um 4xx esperado no primeiro carregamento.
     const infoStatus = action === 'list' ? 200 : 422;
 
-    const access = await resolveAccess(service, userData.user.id);
+    const access = await resolveAccess(service, userId);
     if (!access.isAdmin && !access.isEditor) {
       return json(action === 'list' ? 200 : 403, {
         error: 'Sem permissão para gerenciar templates.',
@@ -235,14 +245,14 @@ serve(async (request) => {
     if (access.workspaceId) {
       await consumeRateLimit(service, {
         workspaceId: access.workspaceId,
-        subjectKey: userData.user.id,
+        subjectKey: userId,
         operation: 'whatsapp_templates',
         maxRequests: 10,
         windowSeconds: 60,
       });
     }
 
-    const row = await resolveNinaWhatsAppRow(service, userData.user.id);
+    const row = await resolveNinaWhatsAppRow(service, userId);
     const hasCloudApi = Boolean(row?.whatsapp_access_token && row?.whatsapp_business_account_id);
 
     // Quem conectou o WhatsApp pela Zernio não tem token da Cloud API aqui: a
