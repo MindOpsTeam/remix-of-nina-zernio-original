@@ -63,6 +63,16 @@ const NylasCredentialsSettings: React.FC<NylasCredentialsSettingsProps> = ({ sta
     }
   };
 
+  const handleCopyRedirectUri = async () => {
+    try {
+      await navigator.clipboard.writeText(redirectUri);
+      setCopiedRedirectUri(true);
+      setTimeout(() => setCopiedRedirectUri(false), 2000);
+    } catch {
+      toast.error('Não foi possível copiar a URL.');
+    }
+  };
+
   return (
     <div className="via-card p-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
