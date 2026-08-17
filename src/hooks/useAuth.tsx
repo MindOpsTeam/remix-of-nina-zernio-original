@@ -40,8 +40,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const bootstrapUser = async (fullName?: string) => {
     const { error } = await supabase.rpc('bootstrap_current_user', {
-      _full_name: fullName ?? null,
+      _full_name: fullName ?? '',
     });
+
     if (error) {
       console.error('Error bootstrapping user:', error);
     }
