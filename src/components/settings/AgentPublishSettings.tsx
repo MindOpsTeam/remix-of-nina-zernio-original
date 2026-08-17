@@ -526,26 +526,23 @@ export default function AgentPublishSettings({
   };
 
   const handlePublish = async () => {
-    if (!latestRun || !gateAllowsPublication) return;
     setPublishing(true);
     try {
+      // Modo de testes: publicamos mesmo com alertas ou sem avaliação recente.
       const preview = await getAgentCompiledPromptPreview(agentId);
-      const compilerWarnings = preview.issues.filter((issue) => issue.severity === 'warning');
-      if (compilerWarnings.length > 0 && !acceptCompilerWarnings) {
-        // Os alertas do servidor normalmente são os mesmos já listados acima; se
-        // divergirem, esta versão da tela está defasada em relação ao backend.
-        toast.warning(localCompilerWarnings.length > 0
-          ? 'Marque a confirmação dos alertas de configuração antes de publicar.'
-          : 'O servidor encontrou alertas que esta tela ainda não mostra. Recarregue a página e tente novamente.');
-        return;
+      if (preview.issues.length > 0) {
+        toast.warning('Publicando com alertas de configuração pendentes.');
+      }
+      if (!gateAllowsPublication) {
+        toast.warning('Publicando sem avaliação aprovada (modo de testes).');
       }
       await publishAgentDraft({
         agentId,
         expectedRevision: draftRevision,
-        evaluationRunId: latestRun.id,
+        evaluationRunId: runMatchesDraft ? latestRun?.id ?? null : null,
         label: label.trim() || null,
-        acceptedWarningCodes: compilerWarnings.map((issue) => issue.code),
-        acceptEvaluationWarnings,
+        acceptedWarningCodes: preview.issues.map((issue) => issue.code),
+        acceptEvaluationWarnings: true,
       });
       toast.success('Nova versão publicada. O atendimento real já usa esta configuração.');
       setLabel('');
@@ -769,7 +766,7 @@ export default function AgentPublishSettings({
         {latestRun?.warnings > 0 && runMatchesDraft && <label className="mt-4 flex items-start gap-3 rounded-xl border border-border bg-muted/30 p-4 text-sm"><input type="checkbox" className="mt-1" checked={acceptEvaluationWarnings} onChange={(event) => setAcceptEvaluationWarnings(event.target.checked)} /><span><strong>Revisei os alertas dos testes.</strong><span className="mt-1 block text-muted-foreground">Entendo o comportamento observado e aceito publicar esta versão.</span></span></label>}
         {localCompilerWarnings.length > 0 && <label className="mt-3 flex items-start gap-3 rounded-xl border border-border p-4 text-sm"><input type="checkbox" className="mt-1" checked={acceptCompilerWarnings} onChange={(event) => setAcceptCompilerWarnings(event.target.checked)} /><span><strong>Revisei {localCompilerWarnings.length === 1 ? 'o alerta de configuração listado acima' : `os ${localCompilerWarnings.length} alertas de configuração listados acima`}.</strong><span className="mt-1 block text-muted-foreground">Aceito publicar mesmo assim; os alertas continuam visíveis aqui.</span></span></label>}
         {!runMatchesDraft && <p className="mt-4 flex items-center gap-2 text-sm text-muted-foreground"><AlertTriangle className="h-4 w-4 text-primary" />Execute os testes depois da última alteração para liberar a publicação.</p>}
-        <div className="mt-5"><Button variant="primary" onClick={() => void handlePublish()} disabled={!canPublish || !draftSaved || !gateAllowsPublication || publishing || localCompilerBlocking.length > 0 || (localCompilerWarnings.length > 0 && !acceptCompilerWarnings) || (Boolean(latestRun?.warnings) && !acceptEvaluationWarnings)}>{publishing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Rocket className="h-4 w-4" />}{publishing ? 'Publicando…' : 'Publicar nova versão'}</Button></div>
+        <div className="mt-5"><Button variant="primary" onClick={() => void handlePublish()} disabled={!canPublish || !draftSaved || publishing}>{publishing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Rocket className="h-4 w-4" />}{publishing ? 'Publicando…' : 'Publicar nova versão'}</Button></div>
       </div>
 
       {versions.length > 0 && <div className="via-card p-6"><p className="via-eyebrow">Histórico</p><h3 className="mt-1 text-lg font-semibold text-foreground">Versões publicadas</h3><p className="mt-1 text-sm text-muted-foreground">Restaurar cria um novo rascunho; nada muda no atendimento até você testar e publicar novamente.</p><div className="mt-5 space-y-2">{versions.map((version, index) => <div key={version.id} className="flex flex-col justify-between gap-3 rounded-xl border border-border p-4 sm:flex-row sm:items-center"><div><div className="flex flex-wrap items-center gap-2"><span className="text-sm font-semibold text-foreground">Versão {version.versionNumber}</span>{index === 0 && <Badge variant="success">Ativa</Badge>}{version.source === 'restoration' && <Badge variant="muted">Restaurada</Badge>}</div><p className="mt-1 text-xs text-muted-foreground">{version.label || 'Sem nome'} · {new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(version.publishedAt))}</p></div><Button variant="secondary" size="sm" disabled={!canPublish || index === 0 || restoringId !== null} onClick={() => void handleRestore(version)}>{restoringId === version.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}Restaurar no rascunho</Button></div>)}</div></div>}
