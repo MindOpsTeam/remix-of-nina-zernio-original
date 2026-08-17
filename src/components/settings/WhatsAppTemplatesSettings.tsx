@@ -239,11 +239,19 @@ export default function WhatsAppTemplatesSettings() {
                       <p className="mt-1.5 text-xs text-destructive">Motivo da rejeição: {template.rejectedReason}</p>
                     )}
                   </div>
-                  {isAdmin && (
-                    <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 hover:text-destructive" aria-label={`Excluir o template ${template.name}`} onClick={() => { setDeleteTarget(template); setDeleteName(template.name); }}>
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  )}
+                  <div className="flex shrink-0 items-center gap-1">
+                    {template.status === 'APPROVED' && (
+                      <Button variant="secondary" size="sm" onClick={() => setSendTarget(template)}>
+                        <Send className="h-4 w-4" />
+                        Disparar
+                      </Button>
+                    )}
+                    {isAdmin && (
+                      <Button variant="ghost" size="icon" className="h-8 w-8 hover:text-destructive" aria-label={`Excluir o template ${template.name}`} onClick={() => { setDeleteTarget(template); setDeleteName(template.name); }}>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
                 </div>
               </div>
             );
