@@ -2611,6 +2611,10 @@ export type Database = {
       }
     }
     Functions: {
+      bootstrap_current_user: {
+        Args: { _full_name?: string }
+        Returns: undefined
+      }
       can_edit_agent: {
         Args: { _user_id?: string; _workspace_id: string }
         Returns: boolean

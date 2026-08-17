@@ -38,7 +38,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return () => subscription.unsubscribe();
   }, []);
 
+  const bootstrapUser = async (fullName?: string) => {
+    const { error } = await supabase.rpc('bootstrap_current_user', {
+      _full_name: fullName ?? '',
+    });
+
+    if (error) {
+      console.error('Error bootstrapping user:', error);
+    }
+  };
+
   const signUp = async (email: string, password: string, fullName?: string) => {
+
     const redirectUrl = `${window.location.origin}/`;
     
     const { data, error } = await supabase.auth.signUp({
@@ -51,20 +62,21 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         },
       },
     });
-    
-    // If signup successful, initialize the system for the new user
-    if (!error && data.user) {
+
+    // Cria profile e papel (primeiro usuário vira admin) e inicializa o sistema
+    if (!error && data.session) {
+      await bootstrapUser(fullName);
+
       try {
         await supabase.functions.invoke('initialize-system', {
-          body: { user_id: data.user.id },
+          body: { user_id: data.session.user.id },
         });
-        console.log('System initialized for new user');
       } catch (initError) {
         console.error('Error initializing system:', initError);
         // Don't fail signup if initialization fails
       }
     }
-    
+
     return { error: error as Error | null };
   };
 
@@ -73,9 +85,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       email,
       password,
     });
-    
+
+    if (!error) {
+      await bootstrapUser();
+    }
+
     return { error: error as Error | null };
   };
+
 
   const signOut = async () => {
     await supabase.auth.signOut();
