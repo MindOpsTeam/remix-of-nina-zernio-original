@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ExternalLink, KeyRound, Loader2, Lock } from 'lucide-react';
+import { Check, Copy, ExternalLink, KeyRound, Loader2, Lock } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '../Button';
 import { Badge } from '../ui/badge';
@@ -26,9 +26,11 @@ const NylasCredentialsSettings: React.FC<NylasCredentialsSettingsProps> = ({ sta
   const [apiKey, setApiKey] = useState('');
   const [apiUri, setApiUri] = useState('https://api.us.nylas.com');
   const [saving, setSaving] = useState(false);
+  const [copiedRedirectUri, setCopiedRedirectUri] = useState(false);
 
   const configured = status?.credentialsSource === 'settings' || status?.credentialsSource === 'env';
   const fromEnv = status?.credentialsSource === 'env';
+  const redirectUri = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/nylas-calendar`;
 
   const handleSave = async () => {
     const id = clientId.trim();
@@ -58,6 +60,16 @@ const NylasCredentialsSettings: React.FC<NylasCredentialsSettingsProps> = ({ sta
       toast.error(error instanceof Error ? error.message : 'Não foi possível remover as credenciais.');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleCopyRedirectUri = async () => {
+    try {
+      await navigator.clipboard.writeText(redirectUri);
+      setCopiedRedirectUri(true);
+      setTimeout(() => setCopiedRedirectUri(false), 2000);
+    } catch {
+      toast.error('Não foi possível copiar a URL.');
     }
   };
 
@@ -150,21 +162,48 @@ const NylasCredentialsSettings: React.FC<NylasCredentialsSettingsProps> = ({ sta
         </p>
       )}
 
-      <p className="mt-4 text-xs leading-relaxed text-muted-foreground">
-        No painel do{' '}
-        <a
-          href="https://dashboard-v3.nylas.com"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-1 text-primary hover:underline"
-        >
-          Nylas
-          <ExternalLink className="h-3 w-3" />
-        </a>
-        : o <strong className="text-foreground">Application ID</strong> fica em App Settings e a{' '}
-        <strong className="text-foreground">API Key</strong> em API Keys. Em Hosted Authentication,
-        adicione o callback desta instalação como redirect URI.
-      </p>
+      <div className="mt-4 space-y-3 rounded-[var(--via-radius-sm)] border border-border bg-secondary/50 p-4">
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          No painel do{' '}
+          <a
+            href="https://dashboard-v3.nylas.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-primary hover:underline"
+          >
+            Nylas
+            <ExternalLink className="h-3 w-3" />
+          </a>
+          : o <strong className="text-foreground">Application ID</strong> fica em App Settings e a{' '}
+          <strong className="text-foreground">API Key</strong> em API Keys. Em Hosted Authentication,
+          cadastre a redirect URI abaixo — sem ela o Nylas rejeita a autorização.
+        </p>
+        <div>
+          <Label htmlFor="nylas-redirect-uri" className="mb-1.5 block text-xs font-medium text-muted-foreground">
+            Redirect URI (callback)
+          </Label>
+          <div className="flex gap-2">
+            <Input
+              id="nylas-redirect-uri"
+              value={redirectUri}
+              readOnly
+              aria-label="Redirect URI do Nylas"
+              className="flex-1 font-mono text-xs"
+            />
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={handleCopyRedirectUri}
+              aria-label="Copiar redirect URI"
+              className="gap-2 px-3"
+            >
+              {copiedRedirectUri ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+              {copiedRedirectUri ? 'Copiado' : 'Copiar'}
+            </Button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 };
