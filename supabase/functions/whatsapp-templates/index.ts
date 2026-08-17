@@ -113,13 +113,22 @@ serve(async (request) => {
     }
 
     const row = await resolveNinaWhatsAppRow(service, userData.user.id);
-    if (!row?.whatsapp_access_token) {
-      return json(infoStatus, {
-        error: 'Configure o token de acesso do WhatsApp Cloud na aba APIs antes de gerenciar templates.',
-        code: 'whatsapp_cloud_not_configured',
-      });
-    }
-    if (!row.whatsapp_business_account_id) {
+    const hasCloudApi = Boolean(row?.whatsapp_access_token && row?.whatsapp_business_account_id);
+
+    // Quem conectou o WhatsApp pela Zernio não tem token da Cloud API aqui: a
+    // Zernio fala com a WABA da conta conectada e expõe os mesmos templates
+    // (/v1/whatsapp/templates). Só cai para ela quando a Cloud API não está completa.
+    if (!hasCloudApi) {
+      const zernio = await resolveZernioContext(service);
+      if (zernio) {
+        return await handleViaZernio(zernio, action, body);
+      }
+      if (!row?.whatsapp_access_token) {
+        return json(infoStatus, {
+          error: 'Conecte o WhatsApp em Configurações > Canais (Zernio) ou informe o token do WhatsApp Cloud na aba APIs para gerenciar templates.',
+          code: 'whatsapp_cloud_not_configured',
+        });
+      }
       // A mesma linha que o whatsapp-sender usará no envio — sem WABA nela, o
       // certo é completar o registro, não cair para as credenciais de outra conta.
       return json(infoStatus, {
@@ -127,6 +136,7 @@ serve(async (request) => {
         code: 'whatsapp_cloud_not_configured',
       });
     }
+
     const graphHeaders = {
       Authorization: `Bearer ${row.whatsapp_access_token}`,
       'Content-Type': 'application/json',
