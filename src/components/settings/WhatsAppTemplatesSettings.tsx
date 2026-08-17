@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { FileCheck2, Loader2, Lock, Plus, RefreshCw, Trash2 } from 'lucide-react';
+import { FileCheck2, Loader2, Lock, Plus, RefreshCw, Send, Trash2 } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 
@@ -26,6 +26,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { useCompanySettings } from '@/hooks/useCompanySettings';
 import { cn } from '@/lib/utils';
+import TemplateSendDialog from '@/components/settings/TemplateSendDialog';
 import { WhatsAppTemplatesError, whatsappTemplatesApi } from '@/services/whatsappTemplates';
 import {
   countBodyVariables,
@@ -79,6 +80,7 @@ export default function WhatsAppTemplatesSettings() {
   const [draft, setDraft] = useState<TemplateDraft>(emptyDraft);
   const [saving, setSaving] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<MetaTemplate | null>(null);
+  const [sendTarget, setSendTarget] = useState<MetaTemplate | null>(null);
   // O nome sobrevive ao fechamento do dialog para o título não piscar vazio
   // durante a animação de saída.
   const [deleteName, setDeleteName] = useState('');
@@ -239,11 +241,19 @@ export default function WhatsAppTemplatesSettings() {
                       <p className="mt-1.5 text-xs text-destructive">Motivo da rejeição: {template.rejectedReason}</p>
                     )}
                   </div>
-                  {isAdmin && (
-                    <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 hover:text-destructive" aria-label={`Excluir o template ${template.name}`} onClick={() => { setDeleteTarget(template); setDeleteName(template.name); }}>
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  )}
+                  <div className="flex shrink-0 items-center gap-1">
+                    {template.status === 'APPROVED' && (
+                      <Button variant="secondary" size="sm" onClick={() => setSendTarget(template)}>
+                        <Send className="h-4 w-4" />
+                        Disparar
+                      </Button>
+                    )}
+                    {isAdmin && (
+                      <Button variant="ghost" size="icon" className="h-8 w-8 hover:text-destructive" aria-label={`Excluir o template ${template.name}`} onClick={() => { setDeleteTarget(template); setDeleteName(template.name); }}>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
                 </div>
               </div>
             );
@@ -348,6 +358,8 @@ export default function WhatsAppTemplatesSettings() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <TemplateSendDialog template={sendTarget} onClose={() => setSendTarget(null)} />
     </div>
   );
 }
