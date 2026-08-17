@@ -65,7 +65,12 @@ export function useAgentDraft({
     setError(null);
 
     try {
-      const loaded = await getCurrentAgentContext();
+      let loaded = await getCurrentAgentContext();
+      if (!loaded) {
+        // Ambiente recém-instalado: cria workspace/agente/rascunho uma vez e recarrega.
+        await bootstrapAgentWorkspace('Workspace', createDefaultAgentConfig());
+        loaded = await getCurrentAgentContext();
+      }
       const publishedVersion = loaded?.publishedVersionId
         ? (await listAgentVersions(loaded.agentId)).find((version) => version.id === loaded.publishedVersionId)
         : null;
