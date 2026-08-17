@@ -652,6 +652,35 @@ serve(async (req) => {
       });
     }
 
+    // Diagnóstico somente-leitura: prova que o grant enxerga eventos reais da
+    // agenda conectada, sem escrever nada no provedor.
+    if (action === 'list_events') {
+      const integration = await getIntegration(supabase);
+      if (!integration || !integration.grant_id || integration.status === 'disconnected') {
+        return json({ connected: false, events: [] });
+      }
+      const calendarId = encodeURIComponent(integration.calendar_id || 'primary');
+      const start = Math.floor(Date.now() / 1000);
+      const end = start + 60 * 60 * 24 * 30;
+      const limit = Math.min(Math.max(Number(body.limit) || 10, 1), 50);
+      const { response, data } = await nylasFetch(
+        grantPath(integration, `/events?calendar_id=${calendarId}&start=${start}&end=${end}&limit=${limit}`),
+      );
+      if (!response.ok) {
+        return json({ error: nylasErrorMessage(data, `Falha ao listar eventos (${response.status})`) }, 502);
+      }
+      const raw = Array.isArray(data?.data) ? data.data : [];
+      const events = raw.map((event: Record<string, unknown>) => ({
+        id: event?.id ?? null,
+        title: event?.title ?? null,
+        when: event?.when ?? null,
+        status: event?.status ?? null,
+      }));
+      return json({ connected: true, accountEmail: integration.account_email, count: events.length, events });
+    }
+
+
+
     if (action === 'save_credentials') {
       const clientId = typeof body.clientId === 'string' ? body.clientId.trim() : '';
       const apiKey = typeof body.apiKey === 'string' ? body.apiKey.trim() : '';
