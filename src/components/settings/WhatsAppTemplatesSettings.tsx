@@ -357,6 +357,8 @@ export default function WhatsAppTemplatesSettings() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <TemplateSendDialog template={sendTarget} onClose={() => setSendTarget(null)} />
     </div>
   );
 }
