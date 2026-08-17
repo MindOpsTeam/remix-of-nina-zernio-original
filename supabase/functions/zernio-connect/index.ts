@@ -259,7 +259,17 @@ serve(async (req) => {
     }
 
     // ---------------------------------------------------------------
+    // Reparo explícito do webhook (usado quando as mensagens não chegam)
+    if (action === 'repair_webhook') {
+      const ensured = await ensureWebhook(supabase, apiKey, settings, supabaseUrl);
+      if (!ensured.ok) return json({ error: 'Falha ao registrar webhook na Zernio', details: ensured.error }, 500);
+      return json({ success: true, webhookId: ensured.webhookId, repaired: ensured.repaired });
+    }
+
+    // ---------------------------------------------------------------
     if (action === 'sync') {
+      // Autocorreção: sync também reconcilia o webhook deste projeto
+      await ensureWebhook(supabase, apiKey, settings, supabaseUrl);
       const res = await zernioFetch(apiKey, '/accounts');
       if (!res.ok) return json({ error: `Falha ao listar contas (HTTP ${res.status})` }, 500);
       const accounts = res.data?.accounts ?? res.data?.data ?? [];
