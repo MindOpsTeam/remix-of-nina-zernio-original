@@ -33,15 +33,31 @@ serve(async (req) => {
       });
     }
 
-    const token = authHeader.replace('Bearer ', '');
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-    
-    if (authError || !user) {
+    const token = authHeader.replace('Bearer ', '').trim();
+
+    // Validate the JWT with an anon client (service-role clients cannot verify user tokens
+    // reliably under the asymmetric signing-keys setup).
+    const authClient = createClient(supabaseUrl, Deno.env.get('SUPABASE_ANON_KEY')!, {
+      global: { headers: { Authorization: `Bearer ${token}` } },
+    });
+
+    let userId: string | null = null;
+    const { data: claimsData, error: claimsError } = await authClient.auth.getClaims(token);
+    if (!claimsError && claimsData?.claims?.sub) {
+      userId = claimsData.claims.sub as string;
+    } else {
+      const { data: userData } = await authClient.auth.getUser(token);
+      userId = userData?.user?.id ?? null;
+    }
+
+    if (!userId) {
       return new Response(JSON.stringify({ error: 'Invalid token' }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
+
+    const user = { id: userId };
 
     const results: ValidationResult[] = [];
     const publishedAgent = await fetchPublishedAgentRuntimeConfig(supabase, user.id);
