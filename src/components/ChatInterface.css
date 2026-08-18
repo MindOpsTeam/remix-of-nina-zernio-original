@@ -352,7 +352,7 @@
     inset: 0 0 0 auto;
     width: min(340px, 100%) !important;
     max-width: 100%;
-    background: var(--via-surface, var(--via-bg));
+    background: var(--via-surface, var(--via-bg)) !important;
     box-shadow: -24px 0 60px -40px var(--via-shadow-ink-40);
     transform: translateX(100%);
     transition:
