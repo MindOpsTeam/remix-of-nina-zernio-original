@@ -325,12 +325,44 @@
   height: 13px;
 }
 
-@media (max-width: 1020px) {
-  .chat-list-panel {
-    width: 330px;
+.chat-workspace {
+  position: relative;
+}
+
+/* Abaixo de 1280px não cabem as três colunas: o painel do lead vira uma
+   gaveta sobreposta, em vez de espremer a conversa. */
+@media (max-width: 1279px) {
+  .chat-profile-panel {
+    position: absolute;
+    z-index: 20;
+    inset: 0 0 0 auto;
+    width: min(340px, 100%) !important;
+    max-width: 100%;
+    background: var(--via-surface, var(--via-bg));
+    box-shadow: -24px 0 60px -40px var(--via-shadow-ink-40);
+    transform: translateX(100%);
+    transition:
+      transform var(--via-dur) var(--via-ease-snap),
+      opacity var(--via-dur) var(--via-ease-snap);
   }
 
-  .chat-workspace > div:last-child {
+  .chat-profile-panel.is-open {
+    transform: translateX(0);
+  }
+
+  .chat-profile-inner {
+    width: 100%;
+  }
+}
+
+@media (max-width: 1120px) {
+  .chat-list-panel {
+    width: 300px;
+  }
+}
+
+@media (max-width: 900px) {
+  .chat-shell.has-active-chat .chat-list-panel {
     display: none;
   }
 }
