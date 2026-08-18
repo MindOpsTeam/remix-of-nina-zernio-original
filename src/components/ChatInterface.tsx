@@ -644,7 +644,7 @@ const ChatInterface: React.FC = () => {
           <div 
             className={`chat-profile-panel ${showProfileInfo ? 'is-open w-80 border-l border-border opacity-100' : 'w-0 opacity-0 border-none'} transition-all duration-300 ease-in-out bg-card/95 flex-shrink-0 flex flex-col overflow-hidden`}
           >
-            <div className="w-80 h-full flex flex-col">
+            <div className="chat-profile-inner w-80 h-full flex flex-col">
               {/* Header */}
               <div className="h-16 flex items-center justify-between px-6 border-b border-border flex-shrink-0">
                 <span className="font-semibold text-foreground">Informações do Lead</span>
