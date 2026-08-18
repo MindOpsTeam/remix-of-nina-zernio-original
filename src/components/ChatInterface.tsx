@@ -458,8 +458,17 @@ const ChatInterface: React.FC = () => {
 
             {/* Chat Header */}
             <div className="chat-conversation-header">
+              <button
+                type="button"
+                className="chat-back-button"
+                onClick={() => setSelectedChatId(null)}
+                title="Voltar para conversas"
+                aria-label="Voltar para conversas"
+              >
+                <ChevronLeft className="w-5 h-5" />
+              </button>
               <div
-                className="flex items-center cursor-pointer hover:bg-accent/50 p-1.5 -ml-1.5 rounded-lg transition-colors pr-3"
+                className="flex min-w-0 items-center cursor-pointer hover:bg-accent/50 p-1.5 -ml-1.5 rounded-lg transition-colors pr-3"
                 onClick={() => setShowProfileInfo(!showProfileInfo)}
               >
                 <div>
