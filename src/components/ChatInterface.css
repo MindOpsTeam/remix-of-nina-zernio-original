@@ -245,6 +245,20 @@
   -webkit-backdrop-filter: var(--via-glass-blur-bar);
 }
 
+.chat-back-button {
+  width: 34px;
+  height: 34px;
+  margin-right: 6px;
+  display: none;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  border: var(--via-glass-ring);
+  border-radius: var(--via-radius-pill);
+  background: var(--via-glass-card-2);
+  color: var(--via-text-primary);
+}
+
 .chat-empty-stage {
   position: relative;
   display: grid;
@@ -389,6 +403,14 @@
 
   .chat-conversation-header {
     padding-inline: 14px;
+  }
+
+  .chat-back-button {
+    display: inline-flex;
+  }
+
+  .chat-conversation-header h2 {
+    flex-wrap: wrap;
   }
 }
 
