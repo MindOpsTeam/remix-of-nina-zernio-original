@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { 
   Search, MoreVertical, Phone, Paperclip, Send, Check, CheckCheck,
   Smile, Play, Loader2, MessageSquare, Info, X, Mail,
-  Tag, Bot, User, Pause, Brain, Plus, FileText
+  Tag, Bot, User, Pause, Brain, Plus, FileText, ChevronLeft
 } from 'lucide-react';
 import { MessageDirection, MessageType, UIConversation, UIMessage, ConversationStatus, TagDefinition } from '../types';
 import { zernioMediaUrl } from '@/lib/mediaProxy';
@@ -22,7 +22,10 @@ const ChatInterface: React.FC = () => {
   const workspaceName = companyName || 'Minha empresa';
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
   const [inputText, setInputText] = useState('');
-  const [showProfileInfo, setShowProfileInfo] = useState(true);
+  // Em telas estreitas o painel do lead é uma gaveta sobreposta: começa fechado.
+  const [showProfileInfo, setShowProfileInfo] = useState(
+    () => typeof window === 'undefined' || window.innerWidth >= 1280,
+  );
   const [searchQuery, setSearchQuery] = useState('');
   const [availableTags, setAvailableTags] = useState<TagDefinition[]>([]);
   const [isTagSelectorOpen, setIsTagSelectorOpen] = useState(false);
@@ -458,8 +461,17 @@ const ChatInterface: React.FC = () => {
 
             {/* Chat Header */}
             <div className="chat-conversation-header">
+              <button
+                type="button"
+                className="chat-back-button"
+                onClick={() => setSelectedChatId(null)}
+                title="Voltar para conversas"
+                aria-label="Voltar para conversas"
+              >
+                <ChevronLeft className="w-5 h-5" />
+              </button>
               <div
-                className="flex items-center cursor-pointer hover:bg-accent/50 p-1.5 -ml-1.5 rounded-lg transition-colors pr-3"
+                className="flex min-w-0 items-center cursor-pointer hover:bg-accent/50 p-1.5 -ml-1.5 rounded-lg transition-colors pr-3"
                 onClick={() => setShowProfileInfo(!showProfileInfo)}
               >
                 <div>
@@ -642,9 +654,9 @@ const ChatInterface: React.FC = () => {
 
           {/* Right Profile Sidebar (CRM View) */}
           <div 
-            className={`${showProfileInfo ? 'w-80 border-l border-border opacity-100' : 'w-0 opacity-0 border-none'} transition-all duration-300 ease-in-out bg-card/95 flex-shrink-0 flex flex-col overflow-hidden`}
+            className={`chat-profile-panel ${showProfileInfo ? 'is-open w-80 border-l border-border opacity-100' : 'w-0 opacity-0 border-none'} transition-all duration-300 ease-in-out bg-card/95 flex-shrink-0 flex flex-col overflow-hidden`}
           >
-            <div className="w-80 h-full flex flex-col">
+            <div className="chat-profile-inner w-80 h-full flex flex-col">
               {/* Header */}
               <div className="h-16 flex items-center justify-between px-6 border-b border-border flex-shrink-0">
                 <span className="font-semibold text-foreground">Informações do Lead</span>
