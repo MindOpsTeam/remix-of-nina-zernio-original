@@ -210,7 +210,9 @@ serve(async (req) => {
       case 'message.read':
       case 'message.failed': {
         const zMsgId = payload.message?.id ?? payload.message?.messageId;
-        if (zMsgId) {
+        const pMsgId = payload.message?.platformMessageId ?? payload.message?.platform_message_id ?? null;
+        const ids = [zMsgId, pMsgId].filter(Boolean) as string[];
+        if (ids.length) {
           const statusValue = eventType.split('.')[1];
           await supabase
             .from('messages')
@@ -219,7 +221,7 @@ serve(async (req) => {
               ...(statusValue === 'delivered' && { delivered_at: new Date().toISOString() }),
               ...(statusValue === 'read' && { read_at: new Date().toISOString() }),
             })
-            .eq('zernio_message_id', zMsgId);
+            .in('zernio_message_id', ids);
         }
         break;
       }
@@ -531,16 +533,30 @@ async function handleMessageSent(supabase: any, payload: any) {
   const message = payload.message ?? {};
   const zConversation = payload.conversation ?? {};
   const zMessageId = message.id ?? message.messageId ?? null;
+  // A Zernio devolve no POST de envio o wamid (platformMessageId), mas manda no
+  // webhook o id interno dela. Sem casar os dois o eco vira mensagem duplicada.
+  const platformMessageId = message.platformMessageId ?? message.platform_message_id ?? null;
   const zConvId = zConversation.id ?? null;
   if (!zMessageId || !zConvId) return;
+
+  const knownIds = [zMessageId, platformMessageId].filter(Boolean) as string[];
 
   const isOurEcho = async () => {
     const { data } = await supabase
       .from('messages')
       .select('id')
-      .eq('zernio_message_id', zMessageId)
+      .in('zernio_message_id', knownIds)
+      .limit(1)
       .maybeSingle();
-    return !!data;
+    if (data) return true;
+    if (!platformMessageId) return false;
+    const { data: byWamid } = await supabase
+      .from('messages')
+      .select('id')
+      .eq('whatsapp_message_id', platformMessageId)
+      .limit(1)
+      .maybeSingle();
+    return !!byWamid;
   };
 
   if (await isOurEcho()) return; // eco de envio nosso
@@ -562,13 +578,12 @@ async function handleMessageSent(supabase: any, payload: any) {
     const since = new Date(Date.now() - 10 * 60 * 1000).toISOString();
     const { data: candidates } = await supabase
       .from('messages')
-      .select('id, content, type, media_type, from_type, status')
+      .select('id, content, type, media_type, from_type, status, zernio_message_id, created_at')
       .eq('conversation_id', conversation.id)
       .neq('from_type', 'user')
-      .is('zernio_message_id', null)
       .gte('created_at', since)
       .order('created_at', { ascending: false })
-      .limit(10);
+      .limit(20);
     const list = candidates ?? [];
     if (type !== 'text') {
       return list.find((m: any) => m.type === type || m.media_type === mediaType) ?? null;
@@ -584,11 +599,16 @@ async function handleMessageSent(supabase: any, payload: any) {
     pendingMatch = await matchPendingOutbound();
   }
   if (pendingMatch) {
+    // Já é nossa linha: só completa os identificadores que faltarem.
     await supabase
       .from('messages')
-      .update({ zernio_message_id: zMessageId, status: 'sent', sent_at: message.createdAt ?? new Date().toISOString() })
-      .eq('id', pendingMatch.id)
-      .is('zernio_message_id', null);
+      .update({
+        ...(pendingMatch.zernio_message_id ? {} : { zernio_message_id: zMessageId }),
+        ...(platformMessageId ? { whatsapp_message_id: platformMessageId } : {}),
+        status: 'sent',
+        sent_at: message.createdAt ?? new Date().toISOString(),
+      })
+      .eq('id', pendingMatch.id);
     return; // envio nosso — não é takeover
   }
 
