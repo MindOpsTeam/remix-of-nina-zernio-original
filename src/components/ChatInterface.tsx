@@ -642,7 +642,7 @@ const ChatInterface: React.FC = () => {
 
           {/* Right Profile Sidebar (CRM View) */}
           <div 
-            className={`${showProfileInfo ? 'w-80 border-l border-border opacity-100' : 'w-0 opacity-0 border-none'} transition-all duration-300 ease-in-out bg-card/95 flex-shrink-0 flex flex-col overflow-hidden`}
+            className={`chat-profile-panel ${showProfileInfo ? 'is-open w-80 border-l border-border opacity-100' : 'w-0 opacity-0 border-none'} transition-all duration-300 ease-in-out bg-card/95 flex-shrink-0 flex flex-col overflow-hidden`}
           >
             <div className="w-80 h-full flex flex-col">
               {/* Header */}
