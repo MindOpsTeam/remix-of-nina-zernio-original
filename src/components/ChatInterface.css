@@ -361,12 +361,6 @@
   }
 }
 
-@media (max-width: 900px) {
-  .chat-shell.has-active-chat .chat-list-panel {
-    display: none;
-  }
-}
-
 @media (max-width: 767px) {
   .chat-shell.is-empty .chat-list-panel {
     width: 100%;
