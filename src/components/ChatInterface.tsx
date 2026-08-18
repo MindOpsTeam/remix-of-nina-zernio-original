@@ -22,7 +22,10 @@ const ChatInterface: React.FC = () => {
   const workspaceName = companyName || 'Minha empresa';
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
   const [inputText, setInputText] = useState('');
-  const [showProfileInfo, setShowProfileInfo] = useState(true);
+  // Em telas estreitas o painel do lead é uma gaveta sobreposta: começa fechado.
+  const [showProfileInfo, setShowProfileInfo] = useState(
+    () => typeof window === 'undefined' || window.innerWidth >= 1280,
+  );
   const [searchQuery, setSearchQuery] = useState('');
   const [availableTags, setAvailableTags] = useState<TagDefinition[]>([]);
   const [isTagSelectorOpen, setIsTagSelectorOpen] = useState(false);
