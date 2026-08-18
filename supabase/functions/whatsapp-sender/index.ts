@@ -308,6 +308,11 @@ async function sendMessageViaZernio(supabase: any, apiKey: string, queueItem: an
   }
 
   const zernioMessageId = responseData.data?.messageId ?? responseData.messageId ?? null;
+  // A Zernio devolve aqui o wamid; o webhook manda o id interno dela. Guardar os
+  // dois é o que evita o eco (message.sent) virar mensagem duplicada.
+  const platformMessageId =
+    responseData.data?.platformMessageId ?? responseData.platformMessageId ??
+    (typeof zernioMessageId === 'string' && zernioMessageId.startsWith('wamid.') ? zernioMessageId : null);
 
   // Persistir o zernio_message_id é o que permite ao zernio-webhook reconhecer
   // o eco do nosso envio (message.sent) — falha aqui não pode ser silenciosa.
@@ -316,6 +321,7 @@ async function sendMessageViaZernio(supabase: any, apiKey: string, queueItem: an
       .from('messages')
       .update({
         zernio_message_id: zernioMessageId,
+        ...(platformMessageId ? { whatsapp_message_id: platformMessageId } : {}),
         status: 'sent',
         sent_at: new Date().toISOString()
       })
@@ -327,6 +333,7 @@ async function sendMessageViaZernio(supabase: any, apiKey: string, queueItem: an
       .insert({
         conversation_id: queueItem.conversation_id,
         zernio_message_id: zernioMessageId,
+        whatsapp_message_id: platformMessageId,
         content: queueItem.content,
         type: chatMessageType(queueItem.message_type),
         from_type: queueItem.from_type,
