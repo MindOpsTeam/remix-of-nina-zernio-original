@@ -597,11 +597,16 @@ async function handleMessageSent(supabase: any, payload: any) {
     pendingMatch = await matchPendingOutbound();
   }
   if (pendingMatch) {
+    // Já é nossa linha: só completa os identificadores que faltarem.
     await supabase
       .from('messages')
-      .update({ zernio_message_id: zMessageId, status: 'sent', sent_at: message.createdAt ?? new Date().toISOString() })
-      .eq('id', pendingMatch.id)
-      .is('zernio_message_id', null);
+      .update({
+        ...(pendingMatch.zernio_message_id ? {} : { zernio_message_id: zMessageId }),
+        ...(platformMessageId ? { whatsapp_message_id: platformMessageId } : {}),
+        status: 'sent',
+        sent_at: message.createdAt ?? new Date().toISOString(),
+      })
+      .eq('id', pendingMatch.id);
     return; // envio nosso — não é takeover
   }
 
