@@ -210,7 +210,9 @@ serve(async (req) => {
       case 'message.read':
       case 'message.failed': {
         const zMsgId = payload.message?.id ?? payload.message?.messageId;
-        if (zMsgId) {
+        const pMsgId = payload.message?.platformMessageId ?? payload.message?.platform_message_id ?? null;
+        const ids = [zMsgId, pMsgId].filter(Boolean) as string[];
+        if (ids.length) {
           const statusValue = eventType.split('.')[1];
           await supabase
             .from('messages')
@@ -219,7 +221,7 @@ serve(async (req) => {
               ...(statusValue === 'delivered' && { delivered_at: new Date().toISOString() }),
               ...(statusValue === 'read' && { read_at: new Date().toISOString() }),
             })
-            .eq('zernio_message_id', zMsgId);
+            .in('zernio_message_id', ids);
         }
         break;
       }
