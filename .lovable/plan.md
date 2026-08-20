@@ -9,7 +9,9 @@ O CliniCorp expõe uma API REST pública e documentada:
 - Autenticação: HTTP Basic com **Usuário API + Token API**, gerados dentro do próprio CliniCorp em *Gerenciar Assinatura > Acesso Externo e Integrações*. Também é exigido o **Subscriber ID** (em geral igual ao usuário API) e, para algumas rotas, o **ID da clínica**, obtido com o suporte.
 - Não há OAuth nem, pelo que a documentação pública mostra, webhooks de entrada. A integração é **pull** (a Nina consulta e escreve; não recebe eventos). Isso significa que mudanças feitas dentro do CliniCorp só chegam à Nina quando ela consultar.
 
-Recursos relevantes para a Nina: Paciente (criar, buscar, aniversários, listar agendamentos), Agendamento (dias disponíveis, horários disponíveis, criar, criar agendamento online, confirmar, alterar status, cancelar, listar), Clínica (horários disponíveis, cadeiras, unidades), Profissional, Procedimento e especialidades, CRM (cadastrar lead, campanhas ativas), Orçamentos e Financeiro.
+Recursos relevantes para a Nina: Paciente (criar, buscar, aniversários, listar agendamentos), Agendamento (dias disponíveis, horários disponíveis, criar, criar agendamento online, confirmar, alterar status, cancelar, listar), Clínica (horários disponíveis, cadeiras, unidades), Profissional, Procedimento e especialidades, CRM (cadastrar lead, campanhas ativas), Financeiro e **Orçamentos**.
+
+Sobre orçamentos, a API oferece: buscar um orçamento específico, listar orçamentos (com filtro por período/paciente), totais de orçamento por paciente e o relatório de orçamentos versus conversão em vendas. É leitura — a API pública não expõe criação de orçamento, então a Nina consulta e comenta orçamentos existentes, mas quem monta o orçamento continua sendo a clínica.
 
 Ponto de atenção conhecido: o `crm/add_leads` apenas cadastra no board, não move etapas nem checa duplicidade — a deduplicação precisa ficar do nosso lado.
 
