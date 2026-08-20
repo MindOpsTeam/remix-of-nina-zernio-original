@@ -35,8 +35,9 @@ Novas tools registradas em `nina-orchestrator`, ativadas apenas quando a integra
 - `clinicorp_agendar_consulta` — cria (ou reutiliza) o paciente e grava o agendamento no CliniCorp.
 - `clinicorp_cancelar_consulta` e `clinicorp_reagendar_consulta`.
 - `clinicorp_registrar_lead` — envia o lead para o CRM do CliniCorp, com guarda de duplicidade nossa.
+- `clinicorp_consultar_orcamento` — busca os orçamentos do paciente identificado pelo telefone da conversa e devolve status, procedimentos, valores e validade, para a Nina responder "quanto ficou" e retomar orçamento parado.
 
-Todas passam pelo mesmo pipeline já existente: confirmação explícita do lead, `runAuditedAction` com registro em `agent_action_runs`, rate limit e redação de dados sensíveis.
+Todas passam pelo mesmo pipeline já existente: confirmação explícita do lead, `runAuditedAction` com registro em `agent_action_runs`, rate limit e redação de dados sensíveis. A consulta de orçamento é leitura, mas exige que o paciente já esteja vinculado ao contato — sem match confiável por telefone/documento a tool recusa, para nunca revelar valores de outra pessoa.
 
 ### 4. Agenda: quem é a fonte da verdade
 Hoje o agendamento nasce na tabela `appointments` e é espelhado no Nylas. Com o CliniCorp, a disponibilidade e a agenda da clínica passam a ser a autoridade quando a integração estiver ativa: a Nina consulta o CliniCorp para oferecer horários, cria lá, e replica localmente em `appointments` com o id externo em `metadata` para exibição no app. Nylas continua funcionando para quem não usa CliniCorp.
