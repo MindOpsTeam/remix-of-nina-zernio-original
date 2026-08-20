@@ -25,7 +25,7 @@ Um conector CliniCorp equivalente ao que já existe para o Nylas: credenciais gu
 
 ### 2. Edge Function `clinicorp` (porta única)
 - Um cliente tipado `ClinicorpClient` em `supabase/functions/_shared/clinicorp.ts`, com métodos por recurso, timeout, tratamento de erro e nenhum `fetch` solto no restante do código.
-- Ações expostas: `test_connection`, `list_professionals`, `list_procedures`, `available_days`, `available_times`, `find_or_create_patient`, `create_appointment`, `confirm_appointment`, `cancel_appointment`, `list_patient_appointments`, `add_lead`.
+- Ações expostas: `test_connection`, `list_professionals`, `list_procedures`, `available_days`, `available_times`, `find_or_create_patient`, `create_appointment`, `confirm_appointment`, `cancel_appointment`, `list_patient_appointments`, `add_lead`, `get_estimate`, `list_estimates`, `patient_estimate_totals`.
 - Validação de entrada com Zod, JWT validado em código com o helper `getUserFromToken` já existente.
 
 ### 3. Ferramentas da Nina
