@@ -56,4 +56,5 @@ Como não há webhook, um job periódico (cron) reconcilia os agendamentos do di
 ## O que preciso saber antes de codar
 
 1. Você já tem uma conta CliniCorp com Usuário API, Token API e ID da clínica para testarmos de verdade, ou a integração deve ser construída "às cegas" contra a documentação?
-2. O escopo prioritário é **agendamento de consultas** (disponibilidade + criar/cancelar) ou **CRM/lead** primeiro?
+2. Qual a ordem de prioridade entre **agendamento de consultas**, **consulta de orçamentos** e **CRM/lead**?
+3. A Nina pode falar valores de orçamento diretamente no WhatsApp, ou deve apenas avisar que existe um orçamento e encaminhar para a clínica?
