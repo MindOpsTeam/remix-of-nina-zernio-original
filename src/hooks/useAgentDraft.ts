@@ -177,8 +177,7 @@ export function useAgentDraft({
       await load();
       return;
     }
-    const mine = configRef.current;
-    if (!mine) {
+    if (!configRef.current) {
       await load();
       return;
     }
@@ -186,8 +185,12 @@ export function useAgentDraft({
       const latest = await getCurrentAgentContext();
       if (!latest) throw new Error('Não foi possível carregar a configuração atual.');
       revisionRef.current = latest.draftRevision;
+      // Relê o config DEPOIS do round-trip: teclas digitadas enquanto o
+      // servidor respondia já atualizaram configRef, e impor o snapshot
+      // capturado antes do await as engoliria — exatamente o que o contrato
+      // deste hook promete que não acontece.
+      const mine = configRef.current;
       setContext({ ...latest, draftConfig: mine });
-      configRef.current = mine;
       setConfig(mine);
       setError(null);
       setStatusTracked('unsaved');
@@ -208,7 +211,9 @@ export function useAgentDraft({
   // e perderia a última edição; o navegador pede confirmação nesses instantes.
   useEffect(() => {
     const handler = (event: BeforeUnloadEvent) => {
-      if (statusRef.current === 'unsaved' || statusRef.current === 'saving') {
+      // 'error' e 'conflict' também são estados com edição não persistida:
+      // fechar a aba neles perde a última edição do mesmo jeito.
+      if (['unsaved', 'saving', 'error', 'conflict'].includes(statusRef.current)) {
         event.preventDefault();
         event.returnValue = '';
       }

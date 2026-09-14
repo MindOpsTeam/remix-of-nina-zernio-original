@@ -230,6 +230,26 @@ serve(async (req) => {
                 : null
             })
             .eq('id', item.id);
+
+          // Falha definitiva precisa chegar ao CHAT: sem isto a mensagem do
+          // operador ficava 'processing' para sempre, indistinguível de
+          // entregue — envio fora da janela virava erro totalmente silencioso.
+          if (!shouldRetry && item.message_id) {
+            // Mescla sobre o metadata DA MENSAGEM (não o do item da fila, que
+            // tem outro formato e sobrescreveria campos como media_id).
+            const { data: messageRow } = await supabase
+              .from('messages')
+              .select('metadata')
+              .eq('id', item.message_id)
+              .maybeSingle();
+            await supabase
+              .from('messages')
+              .update({
+                status: 'failed',
+                metadata: { ...(messageRow?.metadata || {}), send_error: errorMessage.slice(0, 300) },
+              })
+              .eq('id', item.message_id);
+          }
         }
       }
     }
@@ -437,11 +457,14 @@ async function sendMessage(supabase: any, settings: any, queueItem: any) {
     }
   );
 
-  const responseData = await response.json();
+  // Depois do 200 da Meta a mensagem JÁ FOI entregue ao provedor: um corpo
+  // ilegível aqui não pode virar exceção, senão o item volta a 'pending' e o
+  // lead recebe a mesma mensagem duas vezes. Paridade com o caminho Zernio.
+  const responseData = await response.json().catch(() => ({} as Record<string, never>));
 
   if (!response.ok) {
     console.error('[Sender] WhatsApp API error:', responseData);
-    throw new Error(responseData.error?.message || 'WhatsApp API error');
+    throw new Error((responseData as any).error?.message || 'WhatsApp API error');
   }
 
   const whatsappMessageId = responseData.messages?.[0]?.id;

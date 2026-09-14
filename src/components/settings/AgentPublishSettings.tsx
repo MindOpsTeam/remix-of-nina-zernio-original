@@ -49,6 +49,7 @@ import {
   type ReviewerVerdict,
 } from '@/services/evals';
 import { compileAgentPrompt } from '../../../supabase/functions/_shared/agent-prompt-compiler';
+import { textToTurns, turnsToText } from '@/lib/scenarioTurns';
 import AgentSimulator from './AgentSimulator';
 
 /** Cada alerta do compilador aponta o campo de origem; a seção correspondente abre com um clique. */
@@ -83,24 +84,6 @@ function statusPresentation(status: EvalResult['result_status']) {
   return { label: 'Não executado', icon: ClipboardCheck, className: 'text-muted-foreground' };
 }
 
-/** Uma fala por linha, prefixada por "Cliente:" ou "Agente:" — formato do campo de turnos. */
-function turnsToText(messages: GoldenCase['messages']): string {
-  return messages.map((turn) => `${turn.role === 'assistant' ? 'Agente' : 'Cliente'}: ${turn.content}`).join('\n');
-}
-
-function textToTurns(value: string): GoldenCase['messages'] {
-  return value
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => {
-      const assistant = /^(agente|nina|assistente)\s*:/i.test(line);
-      return {
-        role: assistant ? ('assistant' as const) : ('user' as const),
-        content: line.replace(/^(cliente|lead|agente|nina|assistente)\s*:\s*/i, ''),
-      };
-    });
-}
 
 /**
  * A regra que originou o cenário, com o caminho para corrigi-la.
@@ -366,15 +349,27 @@ export default function AgentPublishSettings({
     setProgress({ done: base.done, total: base.total });
     let cursor = 0;
     let completed = base.done;
+    let firstFailure: unknown = null;
     const worker = async () => {
       while (cursor < caseIds.length && !cancelRequestedRef.current) {
         const caseId = caseIds[cursor++];
-        await evalsApi.runCase(runId, caseId);
+        try {
+          await evalsApi.runCase(runId, caseId);
+        } catch (cause) {
+          // Um caso que falha (rate limit, caso apagado, rede) precisa PARAR os
+          // outros workers: sem isso eles continuavam executando em segundo
+          // plano depois do toast de erro, e a rodada ficava aberta sem
+          // aparecer como órfã. O cancelamento é cooperativo via a mesma flag.
+          if (!firstFailure) firstFailure = cause;
+          cancelRequestedRef.current = true;
+          return;
+        }
         completed += 1;
         setProgress({ done: completed, total: base.total });
       }
     };
     await Promise.all(Array.from({ length: Math.min(4, caseIds.length) }, worker));
+    if (firstFailure) throw firstFailure;
   };
 
   const announceSummary = (summary: { gate_status: EvalRun['gate_status'] }) => {
@@ -385,7 +380,15 @@ export default function AgentPublishSettings({
 
   /** Conclui uma rodada (nova ou retomada); cancelamento descarta em vez de fechar. */
   const driveRun = async (runId: string, caseIds: string[], base: { done: number; total: number }) => {
-    await runCases(runId, caseIds, base);
+    try {
+      await runCases(runId, caseIds, base);
+    } catch (cause) {
+      // Todos os workers já pararam (a falha seta a flag de cancelamento).
+      // Descarta a rodada para ela não ficar aberta consumindo o histórico.
+      await evalsApi.discardRun(runId).catch(() => undefined);
+      await load();
+      throw cause;
+    }
     if (cancelRequestedRef.current) {
       await evalsApi.discardRun(runId);
       toast.info('Rodada cancelada. Nenhum resultado parcial será considerado.');
@@ -769,7 +772,7 @@ export default function AgentPublishSettings({
         <div className="mt-5"><Button variant="primary" onClick={() => void handlePublish()} disabled={!canPublish || !draftSaved || publishing}>{publishing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Rocket className="h-4 w-4" />}{publishing ? 'Publicando…' : 'Publicar nova versão'}</Button></div>
       </div>
 
-      {versions.length > 0 && <div className="via-card p-6"><p className="via-eyebrow">Histórico</p><h3 className="mt-1 text-lg font-semibold text-foreground">Versões publicadas</h3><p className="mt-1 text-sm text-muted-foreground">Restaurar cria um novo rascunho; nada muda no atendimento até você testar e publicar novamente.</p><div className="mt-5 space-y-2">{versions.map((version, index) => <div key={version.id} className="flex flex-col justify-between gap-3 rounded-xl border border-border p-4 sm:flex-row sm:items-center"><div><div className="flex flex-wrap items-center gap-2"><span className="text-sm font-semibold text-foreground">Versão {version.versionNumber}</span>{index === 0 && <Badge variant="success">Ativa</Badge>}{version.source === 'restoration' && <Badge variant="muted">Restaurada</Badge>}</div><p className="mt-1 text-xs text-muted-foreground">{version.label || 'Sem nome'} · {new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(version.publishedAt))}</p></div><Button variant="secondary" size="sm" disabled={!canPublish || index === 0 || restoringId !== null} onClick={() => void handleRestore(version)}>{restoringId === version.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}Restaurar no rascunho</Button></div>)}</div></div>}
+      {versions.length > 0 && <div className="via-card p-6"><p className="via-eyebrow">Histórico</p><h3 className="mt-1 text-lg font-semibold text-foreground">Versões publicadas</h3><p className="mt-1 text-sm text-muted-foreground">Restaurar cria um novo rascunho; nada muda no atendimento até você testar e publicar novamente.</p><div className="mt-5 space-y-2">{versions.map((version, index) => <div key={version.id} className="flex flex-col justify-between gap-3 rounded-xl border border-border p-4 sm:flex-row sm:items-center"><div><div className="flex flex-wrap items-center gap-2"><span className="text-sm font-semibold text-foreground">Versão {version.versionNumber}</span>{index === 0 && <Badge variant="success">Ativa</Badge>}{version.source === 'restoration' && <Badge variant="muted">Restaurada</Badge>}</div><p className="mt-1 text-xs text-muted-foreground">{version.label || 'Sem nome'} · {new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(version.publishedAt))}</p></div><Button variant="secondary" size="sm" disabled={!canPublish || index === 0 || restoringId !== null || !draftSaved} title={!draftSaved ? 'Aguarde o rascunho terminar de salvar' : undefined} onClick={() => void handleRestore(version)}>{restoringId === version.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}Restaurar no rascunho</Button></div>)}</div></div>}
 
       <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) resetCaseForm(); }}>
         <DialogContent className="max-w-xl">

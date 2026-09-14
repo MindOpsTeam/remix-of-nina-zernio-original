@@ -1,15 +1,17 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Shield, Bot, Plug, Share2, Loader2, Save, RotateCcw, Lock, CalendarDays } from 'lucide-react';
+import { Shield, Bot, Plug, Share2, Loader2, Save, RotateCcw, Lock, CalendarDays, Sparkles } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from './ui/tabs';
 import AgentWorkspaceSettings from './settings/AgentWorkspaceSettings';
 import ApiSettings, { ApiSettingsRef } from './settings/ApiSettings';
 import ChannelSettings from './settings/ChannelSettings';
 import WhatsAppTemplatesSettings from './settings/WhatsAppTemplatesSettings';
 import CalendarSettings from './settings/CalendarSettings';
+import DemoDataSettings from './settings/DemoDataSettings';
 import { useCompanySettings } from '@/hooks/useCompanySettings';
 import { Button } from './Button';
 import { useOnboardingStatus } from '@/hooks/useOnboardingStatus';
 import { useOutletContext, useSearchParams } from 'react-router-dom';
+
 
 interface OutletContext {
   showOnboarding: boolean;
@@ -26,7 +28,7 @@ const Settings: React.FC = () => {
   // Ajuda e do aviso de chave funcionam sempre, e F5 preserva a aba visível
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get('tab');
-  const activeTab = tabParam && ['agent', 'channels', 'calendar', 'apis'].includes(tabParam) ? tabParam : 'agent';
+  const activeTab = tabParam && ['agent', 'channels', 'calendar', 'apis', 'demo'].includes(tabParam) ? tabParam : 'agent';
 
   // ?setup=1 só faz sentido na aba Agente; em outra aba ele ficaria armado na
   // URL e detonaria o assistente numa visita futura, sem relação com a intenção.
@@ -135,7 +137,12 @@ const Settings: React.FC = () => {
               <Plug className="w-4 h-4" />
               APIs
             </TabsTrigger>
+            <TabsTrigger value="demo" className="gap-2">
+              <Sparkles className="w-4 h-4" />
+              Demonstração
+            </TabsTrigger>
           </TabsList>
+
 
           {activeTab === 'apis' && isAdmin && (
             <div className="flex gap-3">
@@ -197,7 +204,12 @@ const Settings: React.FC = () => {
         <TabsContent value="apis" forceMount className="data-[state=inactive]:hidden">
           {visitedTabs.includes('apis') && <ApiSettings ref={apiRef} />}
         </TabsContent>
+
+        <TabsContent value="demo" forceMount className="data-[state=inactive]:hidden">
+          {visitedTabs.includes('demo') && <DemoDataSettings isAdmin={isAdmin} />}
+        </TabsContent>
       </Tabs>
+
       </div>
     </div>
   );

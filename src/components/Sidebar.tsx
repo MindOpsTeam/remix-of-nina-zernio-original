@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { LayoutDashboard, MessageSquare, Users, Settings as SettingsIcon, LogOut, ShieldCheck, Calendar, Kanban, LifeBuoy, Building2 } from 'lucide-react';
+import { LayoutDashboard, MessageSquare, Users, Settings as SettingsIcon, LogOut, ShieldCheck, Calendar, Kanban, LifeBuoy, Building2, Sparkles, X } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useCompanySettings } from '@/hooks/useCompanySettings';
+import { useDemoMode } from '@/hooks/useDemoMode';
 import { useAuth } from '@/hooks/useAuth';
+
 import { Sidebar, SidebarBody, SidebarLink, useSidebar } from '@/components/ui/sidebar';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
@@ -23,7 +25,57 @@ const menuItems = [
   { id: 'settings', label: 'Configurações', icon: SettingsIcon },
 ];
 
+const DEMO_NOTICE_DISMISS_KEY = 'via:demo-notice-dismissed';
+
+/**
+ * Aviso de que a instância está exibindo dados fictícios.
+ * O usuário pode fechar; a escolha vale enquanto a aba estiver aberta.
+ */
+const DemoModeNotice: React.FC<{ expanded: boolean }> = ({ expanded }) => {
+  const { isDemoMode } = useDemoMode();
+  const [dismissed, setDismissed] = useState(
+    () => typeof window !== 'undefined' && sessionStorage.getItem(DEMO_NOTICE_DISMISS_KEY) === '1'
+  );
+
+  if (!isDemoMode || dismissed) return null;
+
+  const dismiss = () => {
+    sessionStorage.setItem(DEMO_NOTICE_DISMISS_KEY, '1');
+    setDismissed(true);
+  };
+
+  if (!expanded) {
+    return (
+      <div className="flex justify-center py-2" title="Dados de demonstração ativos">
+        <Sparkles className="w-4 h-4 text-amber-400" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="mx-1 mb-3 rounded-lg border border-amber-400/40 bg-amber-400/10 p-3">
+      <div className="flex items-start gap-2">
+        <Sparkles className="w-4 h-4 mt-0.5 flex-shrink-0 text-amber-400" />
+        <div className="min-w-0 flex-1">
+          <p className="text-xs font-semibold text-amber-200">Dados de demonstração ativos</p>
+          <p className="mt-1 text-[11px] leading-snug text-amber-100/80">
+            O conteúdo exibido é fictício. Desative em Configurações → Demonstração.
+          </p>
+        </div>
+        <button
+          onClick={dismiss}
+          className="rounded p-0.5 text-amber-200/70 transition-colors hover:text-amber-100"
+          aria-label="Fechar aviso"
+        >
+          <X className="w-3.5 h-3.5" />
+        </button>
+      </div>
+    </div>
+  );
+};
+
 const Logo = ({ companyName }: { companyName: string }) => {
+
   return (
     <Link to="/dashboard" className="app-sidebar-brand" aria-label="Ir para o dashboard">
       <img src={viaLogoWhite} alt="Viver de IA" className="app-sidebar-brand-lockup" />
@@ -109,7 +161,10 @@ const SidebarContent = () => {
         </nav>
       </div>
 
+      <DemoModeNotice expanded={open} />
+
       {/* A marca vive no topo; o rodapé concentra apenas a preferência de tema. */}
+
       {open && (
         <motion.div
           initial={{ opacity: 0 }}

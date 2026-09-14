@@ -24,6 +24,7 @@ import { useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/Button';
 import { Badge } from '@/components/ui/badge';
 import type { AgentConfig, AgentIdentity, AgentSalesProcess } from '@/domain/agent-config';
+import { computeAgentReadiness, type AgentReadiness, type ReadinessItem } from '@/domain/agent-readiness';
 import { useAgentDraft, type AgentConflictResolution, type AgentDraftSaveStatus } from '@/hooks/useAgentDraft';
 import { getCurrentAgentContext } from '@/services/agent-config';
 import { cn } from '@/lib/utils';
@@ -38,6 +39,14 @@ import AgentSetupAssistant from './AgentSetupAssistant';
 import AgentObservabilityPanel from './AgentObservabilityPanel';
 
 type AgentSection = 'overview' | 'identity' | 'sales' | 'knowledge' | 'actions' | 'publish' | 'advanced';
+
+/** Resumo da base de conhecimento, buscado no pai para alimentar nav e Visão geral. */
+interface KnowledgeSummary {
+  confirmed: number;
+  faqs: number;
+  approvedDocuments: number;
+  attention: number;
+}
 
 const sections: Array<{ id: AgentSection; label: string; icon: typeof Bot }> = [
   { id: 'overview', label: 'Visão geral', icon: Bot },
@@ -265,18 +274,23 @@ function ConflictBanner({ localConfig, resolve }: {
   );
 }
 
-function SectionCard({ icon: Icon, title, description, action, complete }: {
+function SectionCard({ icon: Icon, title, description, action, state = 'pending' }: {
   icon: typeof Bot;
   title: string;
   description: string;
   action: () => void;
-  complete?: boolean;
+  /**
+   * 'ready' = feito; 'pending' = vale continuar; 'optional' = seção que nunca
+   * fica "devendo" — sem ele, Prompt e comportamento mostrava um "Continuar"
+   * perpétuo para um campo explicitamente opcional.
+   */
+  state?: 'ready' | 'pending' | 'optional';
 }) {
   return (
     <button type="button" onClick={action} className="via-card group flex min-h-52 flex-col p-5 text-left transition hover:-translate-y-0.5 hover:border-ring/50">
       <div className="flex items-start justify-between gap-4">
         <span className="rounded-xl border border-border bg-secondary p-2.5"><Icon className="h-5 w-5 text-primary" /></span>
-        {complete ? <Badge variant="success">Pronto</Badge> : <Badge variant="muted">Continuar</Badge>}
+        {state === 'ready' ? <Badge variant="success">Pronto</Badge> : state === 'optional' ? <Badge variant="outline">Opcional</Badge> : <Badge variant="muted">Continuar</Badge>}
       </div>
       <h3 className="mt-5 text-base font-semibold text-foreground">{title}</h3>
       <p className="mt-2 flex-1 text-sm leading-relaxed text-muted-foreground">{description}</p>
@@ -287,58 +301,28 @@ function SectionCard({ icon: Icon, title, description, action, complete }: {
   );
 }
 
-function Overview({ config, setSection, editable, updateConfig, onStartSetup }: {
+function Overview({ config, setSection, editable, updateConfig, onStartSetup, readiness, knowledgeSummary, latestEvaluation }: {
   config: AgentConfig;
   setSection: (section: AgentSection) => void;
   editable: boolean;
   updateConfig: (updater: (current: AgentConfig) => AgentConfig) => void;
   onStartSetup: () => void;
+  readiness: AgentReadiness;
+  knowledgeSummary: KnowledgeSummary | null;
+  latestEvaluation: EvalRun | null;
 }) {
-  const [knowledgeSummary, setKnowledgeSummary] = useState<{
-    confirmed: number;
-    faqs: number;
-    approvedDocuments: number;
-    attention: number;
-  } | null>(null);
-  const [latestEvaluation, setLatestEvaluation] = useState<EvalRun | null>(null);
-  useEffect(() => {
-    let active = true;
-    void Promise.all([
-      knowledgeApi.fetchFacts(),
-      knowledgeApi.fetchDocuments(),
-      knowledgeApi.fetchUnanswered('open'),
-      evalsApi.fetchRuns(1),
-    ]).then(([facts, documents, unanswered, runs]) => {
-      if (!active) return;
-      const now = Date.now();
-      const reviewFacts = facts.filter((fact) => (
-        ['needs_review', 'draft', 'expired'].includes(fact.status)
-        || Boolean(fact.expires_at && new Date(fact.expires_at).getTime() <= now)
-      )).length;
-      const reviewDocuments = documents.filter((document) => ['needs_review', 'error'].includes(document.status)).length;
-      setKnowledgeSummary({
-        confirmed: facts.filter((fact) => fact.category !== 'faq' && fact.status === 'confirmed').length,
-        faqs: facts.filter((fact) => fact.category === 'faq' && fact.status === 'confirmed').length,
-        approvedDocuments: documents.filter((document) => document.status === 'approved').length,
-        attention: unanswered.length + reviewFacts + reviewDocuments,
-      });
-      setLatestEvaluation(runs[0] ?? null);
-    }).catch(() => {
-      // Os cards continuam úteis durante indisponibilidade transitória do resumo.
-    });
-    return () => { active = false; };
-  }, []);
-  const identityReady = Boolean(config.identity.agentName && config.identity.role && config.identity.companyName && config.identity.whatCompanySells && config.identity.primaryAudience);
-  const salesReady = config.salesProcess.desiredOutcomes.length > 0 && config.salesProcess.qualificationFields.length > 0;
+  const identityReady = readiness.identityReady;
   const importedNeedsReview = Boolean(config.migration?.legacyPrompt && !config.migration?.structuredReady);
-  const pending = [
-    !config.identity.companyName && { label: 'Informe o nome da empresa.', section: 'identity' as const },
-    !config.identity.whatCompanySells && { label: 'Explique o que a empresa vende.', section: 'identity' as const },
-    !config.identity.primaryAudience && { label: 'Defina o público principal.', section: 'identity' as const },
-    config.identity.offerings.length === 0 && { label: 'Cadastre pelo menos uma oferta para melhorar as recomendações.', section: 'identity' as const },
-    config.salesProcess.qualificationFields.length === 0 && { label: 'Escolha quais informações ajudam a qualificar um lead.', section: 'sales' as const },
-    Boolean(knowledgeSummary?.attention) && { label: `${knowledgeSummary?.attention} item(ns) de conhecimento precisam de revisão.`, section: 'knowledge' as const },
-  ].filter(Boolean) as Array<{ label: string; section: AgentSection }>;
+  // Duas listas com pesos diferentes: o que trava a publicação e o que apenas
+  // melhora a agente. Antes tudo era uma pilha só, e configuração parcial
+  // parecia proibida quando na verdade já publica e já atende.
+  const required = readiness.required;
+  const recommended: ReadinessItem[] = [
+    ...(knowledgeSummary?.attention
+      ? [{ label: `${knowledgeSummary.attention} item(ns) de conhecimento precisam de revisão.`, section: 'knowledge' as const }]
+      : []),
+    ...readiness.recommended,
+  ];
 
   return (
     <div className="space-y-6">
@@ -359,7 +343,7 @@ function Overview({ config, setSection, editable, updateConfig, onStartSetup }: 
         </div>
       )}
       {importedNeedsReview && (
-        <div className="via-card border-primary/25 bg-primary/[0.04] p-5">
+        <div id="migration-review" className="via-card border-primary/25 bg-primary/[0.04] p-5">
           <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
             <div className="flex items-start gap-3">
               <BrainCircuit className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
@@ -387,33 +371,54 @@ function Overview({ config, setSection, editable, updateConfig, onStartSetup }: 
       )}
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        <SectionCard icon={Compass} title="Identidade e negócio" complete={identityReady} description={`${config.identity.agentName || 'Sua agente'} representa ${config.identity.companyName || 'sua empresa'} para ${config.identity.primaryAudience || 'um público ainda não definido'}.`} action={() => setSection('identity')} />
-        <SectionCard icon={Target} title="Atendimento e vendas" complete={salesReady} description={`${config.salesProcess.qualificationFields.length} informações de qualificação e ${config.salesProcess.desiredOutcomes.length} resultados desejados configurados.`} action={() => setSection('sales')} />
-        <SectionCard icon={BookOpen} title="Conhecimento" complete={Boolean(knowledgeSummary && knowledgeSummary.attention === 0 && (knowledgeSummary.confirmed + knowledgeSummary.faqs + knowledgeSummary.approvedDocuments > 0))} description={knowledgeSummary ? `${knowledgeSummary.confirmed} informações confirmadas, ${knowledgeSummary.faqs} FAQs, ${knowledgeSummary.approvedDocuments} materiais e ${knowledgeSummary.attention} pendências.` : 'Informações confirmadas, perguntas frequentes, documentos e pendências da agente.'} action={() => setSection('knowledge')} />
-        <SectionCard icon={Wrench} title="Ações" complete={config.actions.some((action) => action.enabled)} description="Defina o que a agente pode fazer e quais confirmações são necessárias." action={() => setSection('actions')} />
-        <SectionCard icon={ClipboardCheck} title="Avaliação" complete={latestEvaluation?.gate_status === 'passed'} description={latestEvaluation ? `${latestEvaluation.passed} aprovados, ${latestEvaluation.warnings} alertas, ${latestEvaluation.critical_failures} erros críticos e ${latestEvaluation.unstable} instáveis na última execução.` : 'Converse com o rascunho, execute cenários e publique com segurança.'} action={() => setSection('publish')} />
-        <SectionCard icon={Settings2} title="Prompt e comportamento" description="Edite instruções personalizadas e veja, em tempo real, o prompt completo compilado a partir da configuração." action={() => setSection('advanced')} />
+        <SectionCard icon={Compass} title="Identidade e negócio" state={identityReady ? 'ready' : 'pending'} description={`${config.identity.agentName || 'Sua agente'} representa ${config.identity.companyName || 'sua empresa'} para ${config.identity.primaryAudience || 'um público ainda não definido'}.`} action={() => setSection('identity')} />
+        <SectionCard icon={Target} title="Atendimento e vendas" state={readiness.salesConfigured ? 'ready' : 'pending'} description={`${config.salesProcess.qualificationFields.length} informações de qualificação e ${config.salesProcess.desiredOutcomes.length} resultados desejados configurados.`} action={() => setSection('sales')} />
+        <SectionCard icon={BookOpen} title="Conhecimento" state={knowledgeSummary && knowledgeSummary.attention === 0 && (knowledgeSummary.confirmed + knowledgeSummary.faqs + knowledgeSummary.approvedDocuments > 0) ? 'ready' : 'pending'} description={knowledgeSummary ? `${knowledgeSummary.confirmed} informações confirmadas, ${knowledgeSummary.faqs} FAQs, ${knowledgeSummary.approvedDocuments} materiais e ${knowledgeSummary.attention} pendências.` : 'Informações confirmadas, perguntas frequentes, documentos e pendências da agente.'} action={() => setSection('knowledge')} />
+        <SectionCard icon={Wrench} title="Ações" state={readiness.recommended.some((item) => item.section === 'actions') ? 'pending' : config.actions.some((action) => action.enabled) ? 'ready' : 'optional'} description={readiness.schedulingWithoutAction ? 'Os objetivos pedem agendamento, mas a ação está desligada — ative aqui ou ajuste os objetivos.' : 'Defina o que a agente pode fazer e quais confirmações são necessárias.'} action={() => setSection('actions')} />
+        <SectionCard icon={ClipboardCheck} title="Avaliação" state={latestEvaluation?.gate_status === 'passed' ? 'ready' : 'pending'} description={latestEvaluation ? `${latestEvaluation.passed} aprovados, ${latestEvaluation.warnings} alertas, ${latestEvaluation.critical_failures} erros críticos e ${latestEvaluation.unstable} instáveis na última execução.` : 'Converse com o rascunho, execute cenários e publique com segurança.'} action={() => setSection('publish')} />
+        <SectionCard icon={Settings2} title="Prompt e comportamento" state={readiness.required.some((item) => item.section === 'advanced') ? 'pending' : 'optional'} description={readiness.required.some((item) => item.section === 'advanced') ? 'Uma instrução personalizada perigosa está bloqueando a publicação — revise o campo.' : 'Edite instruções personalizadas e veja, em tempo real, o prompt completo compilado a partir da configuração.'} action={() => setSection('advanced')} />
       </div>
 
       <div className="via-card p-5">
         <div className="flex items-center justify-between gap-3">
           <div>
             <p className="via-eyebrow">Pendências</p>
-            <h3 className="mt-1 text-base font-semibold text-foreground">A agente precisa da sua ajuda</h3>
+            <h3 className="mt-1 text-base font-semibold text-foreground">O que falta e o que pode melhorar</h3>
           </div>
-          <Badge variant={pending.length ? 'muted' : 'success'}>{pending.length || 'Tudo certo'}</Badge>
+          <Badge variant={required.length ? 'muted' : 'success'}>{required.length ? `${required.length} para publicar` : 'Pronta para publicar'}</Badge>
         </div>
-        {pending.length ? (
+        {required.length ? (
           <div className="mt-4 divide-y divide-border rounded-xl border border-border">
-            {pending.map((item) => (
-              <button key={item.label} type="button" onClick={() => setSection(item.section)} className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left text-sm text-foreground hover:bg-muted/50">
+            {required.map((item) => (
+              <button key={item.label} type="button" onClick={() => {
+                // A pendência de migração mora nesta própria tela: navegar para
+                // "overview" seria um clique sem efeito. Rola até o cartão.
+                if (item.section === 'overview') {
+                  document.getElementById('migration-review')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                  return;
+                }
+                setSection(item.section);
+              }} className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left text-sm text-foreground hover:bg-muted/50">
                 <span className="flex items-center gap-2"><AlertCircle className="h-4 w-4 text-muted-foreground" />{item.label}</span>
                 <ChevronRight className="h-4 w-4 text-muted-foreground" />
               </button>
             ))}
           </div>
         ) : (
-          <p className="mt-4 rounded-xl border border-border bg-muted/40 p-4 text-sm text-muted-foreground">Nenhuma pendência básica. Você já pode avançar para testar o comportamento.</p>
+          <p className="mt-4 rounded-xl border border-border bg-muted/40 p-4 text-sm text-muted-foreground">Nada obrigatório pendente. Uma configuração parcial já atende — teste e publique quando quiser; o que está abaixo é lapidação.</p>
+        )}
+        {recommended.length > 0 && (
+          <>
+            <p className="mt-5 text-xs font-medium text-muted-foreground">Opcional, recomendado — a agente funciona sem isso e melhora com isso</p>
+            <div className="mt-2 divide-y divide-border rounded-xl border border-border">
+              {recommended.map((item) => (
+                <button key={item.label} type="button" onClick={() => setSection(item.section)} className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground">
+                  <span className="flex items-center gap-2"><Plus className="h-4 w-4 shrink-0" />{item.label}</span>
+                  <ChevronRight className="h-4 w-4 shrink-0" />
+                </button>
+              ))}
+            </div>
+          </>
         )}
       </div>
       <AgentSuggestionsPanel editable={editable} updateConfig={updateConfig} openKnowledge={() => setSection('knowledge')} />
@@ -563,8 +568,11 @@ export default function AgentWorkspaceSettings() {
       return next;
     }, { replace: true });
   }, [draft.context, draft.isEditable, draft.status, searchParams, setSearchParams]);
-  // Alimenta o fio condutor do ciclo; refaz a consulta ao navegar entre seções
-  // para refletir rodadas concluídas na aba "Testar e publicar".
+  // O fio condutor do ciclo (última rodada de testes) e o resumo de
+  // conhecimento vivem no pai — não na Visão geral — para a navegação poder
+  // sinalizar pendência a partir de qualquer seção. São efeitos SEPARADOS de
+  // propósito: uma indisponibilidade da base de conhecimento não pode apagar o
+  // estado do stepper, e vice-versa.
   const [latestRun, setLatestRun] = useState<EvalRun | null>(null);
   useEffect(() => {
     let active = true;
@@ -573,6 +581,52 @@ export default function AgentWorkspaceSettings() {
       .catch(() => undefined);
     return () => { active = false; };
   }, [activeSection, draft.context?.draftRevision]);
+
+  // O resumo de conhecimento é pesado (baixa fatos e documentos inteiros).
+  // Carrega uma vez para o ponto da navegação existir em qualquer seção, e
+  // depois só atualiza ao entrar nas telas onde ele muda ou é exibido — nunca
+  // por autosave, que troca a revisão do rascunho a cada pausa de digitação.
+  const [knowledgeSummary, setKnowledgeSummary] = useState<KnowledgeSummary | null>(null);
+  const knowledgeLoaded = useRef(false);
+  useEffect(() => {
+    if (knowledgeLoaded.current && activeSection !== 'overview' && activeSection !== 'knowledge') return;
+    let active = true;
+    void Promise.all([
+      knowledgeApi.fetchFacts(),
+      knowledgeApi.fetchDocuments(),
+      knowledgeApi.fetchUnanswered('open'),
+    ]).then(([facts, documents, unanswered]) => {
+      if (!active) return;
+      const now = Date.now();
+      const reviewFacts = facts.filter((fact) => (
+        ['needs_review', 'draft', 'expired'].includes(fact.status)
+        || Boolean(fact.expires_at && new Date(fact.expires_at).getTime() <= now)
+      )).length;
+      const reviewDocuments = documents.filter((document) => ['needs_review', 'error'].includes(document.status)).length;
+      knowledgeLoaded.current = true;
+      setKnowledgeSummary({
+        confirmed: facts.filter((fact) => fact.category !== 'faq' && fact.status === 'confirmed').length,
+        faqs: facts.filter((fact) => fact.category === 'faq' && fact.status === 'confirmed').length,
+        approvedDocuments: documents.filter((document) => document.status === 'approved').length,
+        attention: unanswered.length + reviewFacts + reviewDocuments,
+      });
+    }).catch(() => {
+      // A tela continua útil durante indisponibilidade transitória do resumo.
+    });
+    return () => { active = false; };
+  }, [activeSection]);
+
+  // Fonte única de prontidão: stepper, cards e navegação leem daqui.
+  const readiness = useMemo(
+    () => (draft.config ? computeAgentReadiness(draft.config) : null),
+    [draft.config],
+  );
+  const pendingSections = useMemo(() => {
+    const set = new Set<AgentSection>();
+    readiness?.required.forEach((item) => set.add(item.section as AgentSection));
+    if (knowledgeSummary && knowledgeSummary.attention > 0) set.add('knowledge');
+    return set;
+  }, [readiness, knowledgeSummary]);
 
   const setSection = (section: AgentSection) => {
     setSearchParams((current) => {
@@ -592,11 +646,12 @@ export default function AgentWorkspaceSettings() {
   // O fio condutor do ciclo: onde estou e qual é o próximo passo, sempre visível.
   const cycleSteps = useMemo(() => {
     const config = draft.config;
-    if (!config) return [];
-    // Mesmos critérios dos cards da Visão geral, para o stepper nunca discordar deles.
-    const configured = Boolean(config.identity.agentName && config.identity.role && config.identity.companyName && config.identity.whatCompanySells && config.identity.primaryAudience)
-      && config.salesProcess.desiredOutcomes.length > 0
-      && config.salesProcess.qualificationFields.length > 0;
+    if (!config || !readiness) return [];
+    // "Configurar" completa no piso real de publicação (os blockers do
+    // compilador), não no ideal. Exigir qualificação aqui fazia o stepper
+    // afirmar que faltava configurar quando a publicação já estava liberada —
+    // configuração parcial é um estado válido, e o resto vira recomendação.
+    const configured = readiness.required.length === 0;
     const tested = Boolean(
       latestRun
       && latestRun.status === 'completed'
@@ -604,12 +659,15 @@ export default function AgentWorkspaceSettings() {
       && ['passed', 'warnings'].includes(latestRun.gate_status),
     );
     const live = Boolean(draft.publishedVersion && !draft.hasUnpublishedChanges);
+    // O clique leva para onde a primeira pendência mora — quando o único
+    // blocker é a revisão da migração, Identidade seria o destino errado.
+    const configureTarget = (readiness.required[0]?.section ?? 'identity') as AgentSection;
     return [
-      { id: 'configure', label: 'Configurar', complete: configured, section: 'identity' as AgentSection },
+      { id: 'configure', label: 'Configurar', complete: configured, section: configureTarget },
       { id: 'test', label: 'Testar', complete: tested, section: 'publish' as AgentSection },
       { id: 'publish', label: live ? 'No ar' : 'Publicar', complete: live, section: 'publish' as AgentSection },
     ];
-  }, [draft.config, draft.context?.draftRevision, draft.hasUnpublishedChanges, draft.publishedVersion, latestRun]);
+  }, [draft.config, draft.context?.draftRevision, draft.hasUnpublishedChanges, draft.publishedVersion, latestRun, readiness]);
   const currentCycleIndex = cycleSteps.findIndex((step) => !step.complete);
 
   if (draft.status === 'loading') return <div className="via-card flex min-h-80 items-center justify-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-5 w-5 animate-spin" />Carregando a configuração da agente…</div>;
@@ -642,11 +700,11 @@ export default function AgentWorkspaceSettings() {
       {draft.status === 'error' && <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-4 text-sm text-destructive"><div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start"><span className="flex items-start gap-2"><AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />{draft.error?.message || 'Não foi possível salvar o rascunho.'}</span><div className="flex shrink-0 gap-2"><Button variant="primary" size="sm" onClick={() => void draft.saveNow()}>Tentar salvar de novo</Button><Button variant="outline" size="sm" onClick={() => void draft.reload()}>Recarregar</Button></div></div></div>}
 
       <nav aria-label="Seções da configuração da agente" className="flex gap-1 overflow-x-auto rounded-2xl border border-border bg-card p-1.5">
-        {sections.map((item) => <button key={item.id} type="button" onClick={() => setSection(item.id)} className={cn('inline-flex shrink-0 items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium transition', activeSection === item.id ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:bg-muted hover:text-foreground')}><item.icon className="h-4 w-4" />{item.label}</button>)}
-        <button type="button" onClick={() => setSection('advanced')} className={cn('ml-auto inline-flex shrink-0 items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium transition', activeSection === 'advanced' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted hover:text-foreground')}><Settings2 className="h-4 w-4" />Prompt e comportamento</button>
+        {sections.map((item) => <button key={item.id} type="button" onClick={() => setSection(item.id)} className={cn('inline-flex shrink-0 items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium transition', activeSection === item.id ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:bg-muted hover:text-foreground')}><item.icon className="h-4 w-4" />{item.label}{pendingSections.has(item.id) && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-current opacity-70" title="Há pendências nesta seção"><span className="sr-only">— há pendências nesta seção</span></span>}</button>)}
+        <button type="button" onClick={() => setSection('advanced')} className={cn('ml-auto inline-flex shrink-0 items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium transition', activeSection === 'advanced' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted hover:text-foreground')}><Settings2 className="h-4 w-4" />Prompt e comportamento{pendingSections.has('advanced') && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-current opacity-70" title="Há pendências nesta seção"><span className="sr-only">— há pendências nesta seção</span></span>}</button>
       </nav>
 
-      {activeSection === 'overview' && <Overview config={draft.config} setSection={setSection} editable={draft.isEditable} updateConfig={draft.updateConfig} onStartSetup={() => setSetupOpen(true)} />}
+      {activeSection === 'overview' && readiness && <Overview config={draft.config} setSection={setSection} editable={draft.isEditable} updateConfig={draft.updateConfig} onStartSetup={() => setSetupOpen(true)} readiness={readiness} knowledgeSummary={knowledgeSummary} latestEvaluation={latestRun} />}
       {activeSection === 'identity' && <IdentityEditor config={draft.config} updateConfig={draft.updateConfig} editable={draft.isEditable} />}
       {activeSection === 'sales' && <SalesEditor config={draft.config} updateConfig={draft.updateConfig} editable={draft.isEditable} />}
       {activeSection === 'knowledge' && <KnowledgeWorkspaceSettings editable={draft.isEditable} updateConfigAndSave={draft.updateConfigAndSave} />}

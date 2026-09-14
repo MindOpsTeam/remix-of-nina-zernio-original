@@ -106,6 +106,58 @@ export function validateScheduleRequest(
   return { ok: true };
 }
 
+/**
+ * "Já passou?" na parede de relógio do fuso da agenda.
+ *
+ * `new Date("2026-08-19T14:30:00")` no runtime Deno interpreta o horário como
+ * UTC; comparar isso com `new Date()` desloca São Paulo em 3 horas e rejeita
+ * como "passado" um agendamento válido nas próximas 3 horas. A comparação
+ * certa é entre horários nominais no MESMO fuso.
+ */
+export function isPastInTimezone(
+  date: string,
+  time: string,
+  timeZone = 'America/Sao_Paulo',
+  now = new Date(),
+): boolean {
+  const requested = new Date(`${date}T${time}:00Z`);
+  if (Number.isNaN(requested.getTime())) return true;
+  return requested.getTime() < localNowAsNominalUtc(now, timeZone).getTime();
+}
+
+/**
+ * Primeiro horário que a PRÓPRIA política aprova — usado pelo gerador de
+ * cenários da avaliação.
+ *
+ * O cenário de agendamento antigo inventava um slot fixo (daqui a 2 dias,
+ * 10:00) sem consultar a política. Com expediente começando às 11:00, dia
+ * gerado fora de allowedWeekdays ou antecedência mínima maior, a ferramenta
+ * simulada recusava SEMPRE, o caso crítico reprovava as duas execuções e o
+ * gate ficava bloqueado por defeito do gerador, não da agente.
+ *
+ * A garantia aqui é por construção: o slot devolvido passou por
+ * validateScheduleRequest com a mesma política. Se nenhum dia do horizonte
+ * passa (política impossível — expediente menor que a duração, por exemplo),
+ * devolve null e o chamador decide o que fazer com uma política que nunca
+ * aprovaria agendamento nenhum.
+ */
+export function firstValidScheduleSlot(
+  actionPolicy: unknown,
+  now = new Date(),
+): { date: string; time: string } | null {
+  const policy = record(record(actionPolicy).scheduling);
+  const timeZone = text(policy.timeZone, 'America/Sao_Paulo');
+  const time = text(policy.startTime, '09:00');
+  const horizonDays = Math.min(numeric(policy.maximumAdvanceDays, 60), 60);
+  const localNow = localNowAsNominalUtc(now, timeZone);
+  for (let offset = 0; offset <= horizonDays; offset++) {
+    const day = new Date(localNow.getTime() + offset * 86_400_000);
+    const date = day.toISOString().slice(0, 10);
+    if (validateScheduleRequest({ date, time }, actionPolicy, now).ok) return { date, time };
+  }
+  return null;
+}
+
 export function simulationResult(action: string, input: UnknownRecord) {
   return {
     success: true,

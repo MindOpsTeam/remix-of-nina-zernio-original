@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { 
-  Search, MoreVertical, Phone, Paperclip, Send, Check, CheckCheck,
+  AlertCircle, Search, MoreVertical, Phone, Paperclip, Send, Check, CheckCheck,
   Smile, Play, Loader2, MessageSquare, Info, X, Mail,
   Tag, Bot, User, Pause, Brain, Plus, FileText, ChevronLeft
 } from 'lucide-react';
@@ -581,6 +581,7 @@ const ChatInterface: React.FC = () => {
                             )}
                             <span className="text-[10px] text-muted-foreground font-medium">{msg.timestamp}</span>
                             {isOutgoing && (
+                              msg.status === 'failed' ? <span className="inline-flex items-center gap-1 text-[10px] font-medium text-destructive" title="A mensagem não foi entregue"><AlertCircle className="w-3.5 h-3.5" />Falhou</span> :
                               msg.status === 'read' ? <CheckCheck className="w-3.5 h-3.5 text-primary" /> :
                               msg.status === 'delivered' ? <CheckCheck className="w-3.5 h-3.5 text-muted-foreground" /> :
                               <Check className="w-3.5 h-3.5 text-muted-foreground" />

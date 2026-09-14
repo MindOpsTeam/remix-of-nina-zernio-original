@@ -157,6 +157,26 @@ function collectIssues(config: UnknownRecord): CompilerIssue[] {
     issue(issues, 'no_qualification_fields', 'warning', 'salesProcess.qualificationFields', 'Nenhuma informação de qualificação foi configurada.');
   }
 
+  // Objetivo pede agendamento sem a ferramenta: o prompt instruiria a agente a
+  // oferecer reunião que ela não consegue marcar. As regras fixas impedem
+  // anunciar sucesso falso, mas não impedem a promessa — melhor avisar aqui.
+  const wantsScheduling = stringArray(identity.primaryGoals).includes('qualify_and_schedule')
+    || stringArray(sales.desiredOutcomes).includes('schedule_meeting');
+  const appointmentsEnabled = array(config.actions)
+    .map(record)
+    .some((action) => text(action.actionId) === 'appointments' && boolean(action.enabled));
+  if (wantsScheduling && !appointmentsEnabled) {
+    issue(
+      issues,
+      'scheduling_goal_without_action',
+      'warning',
+      // A correção mora em Ações (habilitar a ação), então o campo aponta para
+      // lá — mesmo padrão do gate calendar_connection_required do servidor.
+      'actions.appointments',
+      'Os objetivos pedem agendamento, mas a ação de agendamento está desligada — a agente vai oferecer reunião sem conseguir marcá-la. Ative a ação em Ações ou remova o agendamento dos objetivos.',
+    );
+  }
+
   const legacyPrompt = text(migration.legacyPrompt);
   if (legacyPrompt && migration.structuredReady !== true) {
     issue(

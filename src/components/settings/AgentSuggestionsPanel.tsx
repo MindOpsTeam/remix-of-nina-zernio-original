@@ -74,13 +74,15 @@ export default function AgentSuggestionsPanel({
       } else if (suggestion.suggestion_type === 'handoff_rule') {
         const reason = String(suggestion.proposed_change.reason || '').trim();
         if (!reason) throw new Error('A sugestão não contém uma regra de atendimento humano.');
+        // Aceite ANTES da mutação: se o registro falhar, o rascunho fica
+        // intacto e a sugestão continua pendente — reaplicar não duplica.
+        await suggestionsApi.acceptConfig(suggestion.id);
         updateConfig((current) => ({
           ...current,
           actions: current.actions.map((action) => action.actionId === 'human_handoff'
             ? { ...action, handoff: { ...action.handoff!, reasons: Array.from(new Set([...(action.handoff?.reasons ?? []), reason])) } }
             : action),
         }));
-        await suggestionsApi.acceptConfig(suggestion.id);
         toast.success('Regra adicionada ao rascunho.');
       } else if (suggestion.suggestion_type === 'missing_material') {
         openKnowledge();
@@ -88,11 +90,14 @@ export default function AgentSuggestionsPanel({
       } else {
         const instruction = String(suggestion.proposed_change.instruction || '').trim();
         if (!instruction) throw new Error('A sugestão não contém uma instrução aplicável.');
+        await suggestionsApi.acceptConfig(suggestion.id);
         updateConfig((current) => ({
           ...current,
-          customInstructions: [current.customInstructions, instruction].filter(Boolean).join('\n\n'),
+          // Instrução já presente não é anexada de novo (reaplicar era duplicar).
+          customInstructions: current.customInstructions.includes(instruction)
+            ? current.customInstructions
+            : [current.customInstructions, instruction].filter(Boolean).join('\n\n'),
         }));
-        await suggestionsApi.acceptConfig(suggestion.id);
         toast.success('Sugestão adicionada ao rascunho.');
       }
       setSuggestions((items) => items.filter((item) => item.id !== suggestion.id));

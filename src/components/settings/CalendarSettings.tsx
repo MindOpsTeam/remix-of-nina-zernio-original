@@ -408,6 +408,11 @@ const CalendarSettings: React.FC = () => {
   // Sobra: erro de rede, 400, 429, corpo de erro com HTTP 200. Sem um ramo
   // próprio, a tela desenharia "Não conectada" saudável em cima de uma falha.
   const loadFailed = Boolean(loadFailure) && !sessionExpired && !forbidden && !unavailable && !connected;
+  // A pendência decide a copy: credenciais o próprio admin resolve nesta tela;
+  // provedor é no painel do Nylas; o resto é servidor.
+  const missingConfig = status?.missingConfig ?? [];
+  const missingCredentials = missingConfig.some((item) => item.includes('credenciais'));
+  const missingConnector = missingConfig.some((item) => item.includes('provedor'));
   const showManagement = connected && !connecting;
   const canConnect = isAdmin && !permissionsLoading && !unavailable && !loadFailed
     && !sessionExpired && !forbidden && status?.configured !== false;
@@ -499,12 +504,19 @@ const CalendarSettings: React.FC = () => {
               <div className="min-w-0">
                 <p className="text-sm font-medium text-foreground">A conexão de agenda ainda não está no ar</p>
                 <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
-                  Falta terminar a configuração no servidor. Nada nesta tela resolve — a Nina segue
-                  agendando normalmente, só não espelha nada em agenda externa.
+                  {missingCredentials
+                    ? 'Falta cadastrar as credenciais do Nylas. Isso se resolve aqui mesmo, no cartão logo abaixo — o passo a passo está lá.'
+                    : missingConnector
+                      ? 'As credenciais estão certas, mas a sua conta do Nylas não tem nenhum provedor de agenda habilitado. Adicione ao menos um em Connectors, no painel do Nylas.'
+                      : 'Falta terminar a configuração no servidor, e isso não se resolve por esta tela.'}
+                </p>
+                <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                  Enquanto isso, a Nina segue agendando normalmente — ela só não espelha nada em
+                  agenda externa.
                 </p>
                 {status?.missingConfig?.length ? (
                   <p className="mt-2 text-xs text-muted-foreground">
-                    Pendente no servidor: {status.missingConfig.join(', ')}.
+                    Pendente: {status.missingConfig.join(', ')}.
                   </p>
                 ) : null}
                 {(loadFailure?.detail || status?.lastError) && (

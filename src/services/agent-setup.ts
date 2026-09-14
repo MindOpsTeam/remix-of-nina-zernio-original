@@ -284,6 +284,67 @@ export async function generateAgentSetupProposalStream(
   return finalizeProposal(final);
 }
 
+/**
+ * O schema da proposta tem .default() em tudo, então depois do parse ela SEMPRE
+ * possui todas as chaves — e um spread cego faria o vazio do modelo apagar o
+ * que o usuário já preencheu no rascunho, sem isso aparecer na revisão. A
+ * mescla preserva o valor atual quando o proposto está vazio.
+ */
+/**
+ * Defaults do schema da proposta para communication. Valor proposto IGUAL ao
+ * default é indistinguível de "o modelo não falou sobre isso" — nesses casos a
+ * preferência atual do usuário prevalece. O custo é ignorar o modelo quando
+ * ele escolhe ativamente o default; o benefício é nunca resetar em silêncio
+ * uma preferência ajustada (ex.: tamanho máximo 500 voltando para 800).
+ */
+const COMMUNICATION_SCHEMA_DEFAULTS: Record<string, unknown> = {
+  formality: 'balanced',
+  emojiUsage: 'light',
+  idealMessageLength: 320,
+  maximumMessageLength: 800,
+  oneQuestionAtATime: true,
+  answerDirectQuestionsFirst: true,
+  useLeadName: true,
+};
+
+function mergeProposedCommunication<T extends Record<string, unknown>>(
+  current: T,
+  proposed: Record<string, unknown>,
+): T {
+  const merged: Record<string, unknown> = { ...current };
+  for (const [key, value] of Object.entries(proposed)) {
+    if (value === undefined || value === null) continue;
+    if (COMMUNICATION_SCHEMA_DEFAULTS[key] === value) continue;
+    merged[key] = value;
+  }
+  return merged as T;
+}
+
+/**
+ * Escalares cujo default do schema NÃO é vazio: 'Nina', 'remote',
+ * 'consultative'... Valor proposto igual ao default é indistinguível de "o
+ * modelo não falou disso" — a preferência atual prevalece, pelo mesmo motivo
+ * do merge de communication.
+ */
+const NON_EMPTY_SCHEMA_DEFAULTS: Record<string, unknown> = {
+  agentName: 'Nina',
+  role: 'Assistente de vendas',
+  serviceMode: 'remote',
+  model: 'consultative',
+};
+
+function keepFilled<T extends Record<string, unknown>>(current: T, proposed: Partial<T>): T {
+  const merged: Record<string, unknown> = { ...current };
+  for (const [key, value] of Object.entries(proposed)) {
+    if (value === undefined || value === null) continue;
+    if (typeof value === 'string' && value.trim() === '') continue;
+    if (Array.isArray(value) && value.length === 0) continue;
+    if (key in NON_EMPTY_SCHEMA_DEFAULTS && NON_EMPTY_SCHEMA_DEFAULTS[key] === value) continue;
+    merged[key] = value;
+  }
+  return merged as T;
+}
+
 export function applyAgentSetupProposal(
   current: AgentConfig,
   proposal: AgentSetupProposal,
@@ -292,24 +353,35 @@ export function applyAgentSetupProposal(
   const next = structuredClone(current);
   if (accepted.identity) {
     next.identity = {
-      ...current.identity,
-      ...proposal.identity,
-      offerings: proposal.identity.offerings.map((offering) => ({ id: crypto.randomUUID(), ...offering })),
+      ...keepFilled(current.identity as unknown as Record<string, unknown>, proposal.identity as unknown as Record<string, unknown>) as typeof current.identity,
+      offerings: proposal.identity.offerings.length > 0
+        ? proposal.identity.offerings.map((offering) => ({ id: crypto.randomUUID(), ...offering }))
+        : current.identity.offerings,
       socialProof: current.identity.socialProof,
     };
   }
   if (accepted.sales) {
     next.salesProcess = {
-      ...current.salesProcess,
-      ...proposal.salesProcess,
-      communication: {
-        ...current.salesProcess.communication,
-        ...proposal.salesProcess.communication,
-      },
-      stages: proposal.salesProcess.stages.map((stage, order) => ({ id: crypto.randomUUID(), order, ...stage })),
-      qualificationFields: proposal.salesProcess.qualificationFields.map((field) => ({ id: crypto.randomUUID(), ...field })),
+      ...keepFilled(current.salesProcess as unknown as Record<string, unknown>, proposal.salesProcess as unknown as Record<string, unknown>) as typeof current.salesProcess,
+      // Depois do parse a proposta SEMPRE traz communication completo (defaults
+      // do schema), então spread cego apagava preferências já ajustadas com
+      // valores que o modelo nem propôs. Só entra o que difere do default do
+      // schema — sinal de escolha ativa do modelo.
+      communication: mergeProposedCommunication(
+        current.salesProcess.communication,
+        proposal.salesProcess.communication,
+      ),
+      stages: proposal.salesProcess.stages.length > 0
+        ? proposal.salesProcess.stages.map((stage, order) => ({ id: crypto.randomUUID(), order, ...stage }))
+        : current.salesProcess.stages,
+      qualificationFields: proposal.salesProcess.qualificationFields.length > 0
+        ? proposal.salesProcess.qualificationFields.map((field) => ({ id: crypto.randomUUID(), ...field }))
+        : current.salesProcess.qualificationFields,
     };
   }
-  if (accepted.behavior) next.customInstructions = proposal.customInstructions;
+  // Comportamento vazio na proposta não apaga instruções já escritas.
+  if (accepted.behavior && proposal.customInstructions.trim()) {
+    next.customInstructions = proposal.customInstructions;
+  }
   return parseAgentConfig(next);
 }

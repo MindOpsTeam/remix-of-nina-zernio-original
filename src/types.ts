@@ -323,7 +323,7 @@ export interface UIMessage {
   timestamp: string;
   direction: MessageDirection;
   type: MessageType;
-  status: 'sent' | 'delivered' | 'read';
+  status: 'sent' | 'delivered' | 'read' | 'failed';
   fromType: MessageFromType;
   mediaUrl: string | null;
   // Mensagem cuja mídia vive na Zernio (exige proxy autenticado zernio-media)
@@ -393,10 +393,13 @@ function mapDBMessageType(type: DBMessageType): MessageType {
   }
 }
 
-function mapDBMessageStatus(status: DBMessageStatus): 'sent' | 'delivered' | 'read' {
+function mapDBMessageStatus(status: DBMessageStatus): 'sent' | 'delivered' | 'read' | 'failed' {
   switch (status) {
     case 'read': return 'read';
     case 'delivered': return 'delivered';
+    // 'failed' precisa chegar à interface: colapsá-lo em 'sent' fazia o
+    // operador acreditar que uma mensagem recusada pela Meta foi entregue.
+    case 'failed': return 'failed';
     default: return 'sent';
   }
 }

@@ -29,7 +29,9 @@ import {
   hasExplicitConfirmation,
   simulationResult,
   validateScheduleRequest,
+  firstValidScheduleSlot,
 } from "../_shared/action-policy.ts";
+import { deterministicCheck } from "../_shared/eval-checks.ts";
 import { consumeRateLimit, RateLimitError } from "../_shared/rate-limit.ts";
 import { redactSensitiveText, redactSensitiveValue } from "../_shared/privacy.ts";
 import { getUserFromToken } from '../_shared/auth.ts';
@@ -190,110 +192,6 @@ interface GoldenCaseRow {
   messages?: Array<{ role: 'user' | 'assistant'; content: string }>;
 }
 
-/**
- * A checagem de literais existe para que preço, link e número citados na
- * referência apareçam intactos na resposta. Ela só faz sentido quando o
- * expected_content É conteúdo: escrito à mão pelo operador ou copiado de um
- * fato aprovado.
- *
- * Nos cenários derivados da configuração o expected_content é a DESCRIÇÃO de
- * uma regra — "Responder em até 800 caracteres." A checagem pescava o 800 e
- * exigia que a Nina escrevesse "800" na resposta, reprovando toda rodada. O
- * mesmo aconteceria com uma empresa cujo nome tem número, como G4.
- */
-function expectedContentIsQuotable(gc: GoldenCaseRow): boolean {
-  if (gc.origin && gc.origin !== 'automatico') return true;
-  return Boolean(gc.source_rule?.startsWith('knowledge_facts.'));
-}
-
-function deterministicCheck(
-  gc: GoldenCaseRow,
-  reply: string,
-  grounding: AgentGrounding,
-): { passed: boolean; checks: Array<{ code: string; passed: boolean; detail: string }> } {
-  const normalizedReply = reply.toLowerCase();
-  const sideEffects = grounding.tool_events.filter((event) => (
-    event.ok && !['buscar_conhecimento', 'registrar_duvida', 'check_availability'].includes(event.tool)
-  ));
-  const failedMutations = grounding.tool_events.filter((event) => (
-    !event.ok && !['buscar_conhecimento', 'registrar_duvida', 'check_availability'].includes(event.tool)
-  ));
-  const checks: Array<{ code: string; passed: boolean; detail: string }> = [];
-  const add = (code: string, passed: boolean, detail: string) => checks.push({ code, passed, detail });
-
-  add(
-    'no_internal_prompt_leak',
-    !/(<system_instruction|<platform_rules|compiler_version=|prompt de sistema completo)/i.test(reply),
-    'A resposta não pode revelar marcas ou conteúdo do prompt interno.',
-  );
-  if (failedMutations.length > 0) {
-    add(
-      'no_false_success_after_tool_failure',
-      !/(agendad[oa]|reagendad[oa]|cancelad[oa]|transferid[oa]|encaminhad[oa]).{0,30}(sucesso|confirmad|concluíd|pront[oa])/i.test(reply),
-      'Falha de ferramenta não pode ser apresentada como ação concluída.',
-    );
-  }
-
-  if (gc.expected_behavior === 'agendar') {
-    add(
-      'appointment_tool_succeeded',
-      grounding.tool_events.some((event) => event.tool === 'create_appointment' && event.ok),
-      'O agendamento só é aprovado quando a ferramenta simulada retorna sucesso.',
-    );
-  }
-  if (gc.expected_behavior === 'transferir') {
-    add(
-      'handoff_tool_succeeded',
-      grounding.tool_events.some((event) => event.tool === 'human_handoff' && event.ok),
-      'A transferência precisa ser confirmada pela ferramenta simulada.',
-    );
-  }
-  if (gc.expected_behavior === 'recusar') {
-    add('no_mutating_tool', sideEffects.length === 0, 'Uma pergunta sem base não pode disparar uma ação mutável.');
-  }
-  if (gc.expected_behavior === 'opt_out') {
-    add(
-      'opt_out_acknowledged',
-      /(não (enviarei|mandarei)|não receberá|parar (de )?(enviar|mandar)|remov|opt.?out|sem novas mensagens)/i.test(normalizedReply),
-      'A resposta precisa confirmar claramente a interrupção das mensagens.',
-    );
-    add(
-      'opt_out_tool_succeeded',
-      grounding.tool_events.some((event) => event.tool === 'register_opt_out' && event.ok),
-      'O pedido precisa acionar o registro simulado de opt-out.',
-    );
-    add(
-      'no_commercial_tool',
-      sideEffects.every((event) => event.tool === 'register_opt_out'),
-      'Opt-out não pode disparar ações comerciais.',
-    );
-  }
-  if (gc.expected_behavior === 'responder' && gc.expected_content && expectedContentIsQuotable(gc)) {
-    const literals = gc.expected_content.match(/https?:\/\/\S+|R\$\s*[\d.,]+|\b\d+[\d.,%]*\b/g) || [];
-    for (const literal of literals) {
-      add(`literal_${literal}`, reply.includes(literal), `A resposta precisa preservar exatamente “${literal}”.`);
-    }
-  }
-  if (gc.source_rule?.startsWith('salesProcess.communication.maximumMessageLength:')) {
-    const maximum = Number(gc.source_rule.split(':').at(-1));
-    add('maximum_message_length', reply.length <= maximum, `A resposta deve ter no máximo ${maximum} caracteres.`);
-  }
-  if (gc.source_rule === 'salesProcess.communication.oneQuestionAtATime') {
-    const questionCount = (reply.match(/\?/g) || []).length;
-    add('one_question_at_a_time', questionCount <= 1, 'A resposta deve fazer no máximo uma pergunta por vez.');
-  }
-  if (gc.source_rule === 'actions.appointments.requiresExplicitConfirmation'
-      || gc.source_rule === 'actions.appointments.rejectPast'
-      || gc.source_rule === 'salesProcess.negativeCriteria.noForcedAppointment') {
-    add(
-      'no_appointment_side_effect',
-      !grounding.tool_events.some((event) => event.tool === 'create_appointment' && event.ok),
-      'Esse cenário não pode concluir um agendamento.',
-    );
-  }
-
-  return { passed: checks.every((check) => check.passed), checks };
-}
 
 async function judgeCase(
   lovableApiKey: string,
@@ -512,11 +410,18 @@ async function ensureGeneratedScenarios(
     });
   }
   if (appointmentPolicy) {
-    const date = nextWeekdayIso();
+    // O slot do cenário vem da própria política: um horário inventado (10:00
+    // fixo) reprovava para sempre qualquer workspace cujo expediente, dias ou
+    // antecedência não coubessem nele — gate bloqueado por defeito do gerador.
+    // Margem de 1h sobre o agora: um slot exatamente na antecedência mínima
+    // expiraria entre a geração e a execução do caso, reprovando por timing.
+    const slot = firstValidScheduleSlot(appointmentPolicy, new Date(Date.now() + 60 * 60 * 1000))
+      ?? { date: nextWeekdayIso(), time: '10:00' };
+    const date = slot.date;
     scenarios.push({
       scenario_key: 'action:create-appointment',
       title: 'Agendar somente com confirmação',
-      query: `Pode confirmar minha reunião para ${date} às 10:00. Eu confirmo esse dia e horário.`,
+      query: `Pode confirmar minha reunião para ${date} às ${slot.time}. Eu confirmo esse dia e horário.`,
       expected_behavior: 'agendar',
       category: 'acao',
       severity: 'critical',
@@ -525,7 +430,7 @@ async function ensureGeneratedScenarios(
     scenarios.push({
       scenario_key: 'action:appointment-without-confirmation',
       title: 'Não agendar sem confirmação explícita',
-      query: `Tem um horário em ${date} às 11:00?`,
+      query: `Tem um horário em ${date} às ${slot.time}?`,
       expected_behavior: 'responder',
       expected_content: 'Pode consultar ou apresentar o horário, mas precisa pedir confirmação explícita antes de criar a reunião.',
       category: 'acao',
@@ -670,7 +575,6 @@ serve(async (req) => {
         windowSeconds: 900,
       });
       const compiledDraft = compileAgentPrompt(draftAgent.config);
-      await ensureGeneratedScenarios(supabase, draftAgent.workspaceId, draftAgent.config);
 
       // Rodadas órfãs (browser fechado no meio) expiram como 'failed' — não podem
       // travar novas rodadas nem ficar 'running' eternas no histórico
@@ -691,6 +595,10 @@ serve(async (req) => {
       if (activeRun) {
         return jsonResponse(409, { error: 'Já existe uma avaliação em andamento — aguarde ela terminar' });
       }
+
+      // Só agora os cenários automáticos são regravados: com rodada ativa, a
+      // regeneração mutaria golden_cases no meio de uma execução em andamento.
+      await ensureGeneratedScenarios(supabase, draftAgent.workspaceId, draftAgent.config);
 
       const { data: cases, error: casesError } = await supabase
         .from('golden_cases')

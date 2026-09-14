@@ -159,7 +159,7 @@ serve(async (req) => {
             .eq('id', lastDbMessage.id);
           
           console.log(`[MessageGrouper] Updated last message with combined content`);
-        } else if (dbMessages[0].type === 'audio' && combinedContent !== dbMessages[0].content) {
+        } else if (dbMessages[0].type === 'audio' && combinedContent.trim() && combinedContent !== dbMessages[0].content) {
           // Update single audio message with transcription
           await supabase
             .from('messages')
@@ -170,7 +170,10 @@ serve(async (req) => {
         }
 
         // If conversation is handled by Nina, queue for AI processing
-        if (conversation.status === 'nina') {
+        if (conversation.status === 'nina' && !combinedContent.trim()) {
+          console.warn('[MessageGrouper] Grupo sem conteúdo utilizável — nada para a Nina responder', messageIds);
+        }
+        if (conversation.status === 'nina' && combinedContent.trim()) {
           // Check if already in queue to avoid duplicates
           const { data: existingQueue } = await supabase
             .from('nina_processing_queue')
@@ -196,7 +199,14 @@ serve(async (req) => {
               });
 
             if (ninaQueueError) {
-              console.error('[MessageGrouper] Error queuing for Nina:', ninaQueueError);
+              // Índice único parcial em (message_id): duas execuções
+              // concorrentes do grouper convergem aqui, e a que perde a
+              // corrida recebe 23505 — é o dedupe funcionando, não erro.
+              if (ninaQueueError.code === '23505') {
+                console.log('[MessageGrouper] Mensagem já enfileirada para a Nina (corrida entre execuções):', lastDbMessage.id);
+              } else {
+                console.error('[MessageGrouper] Error queuing for Nina:', ninaQueueError);
+              }
             } else {
               console.log('[MessageGrouper] Message queued for Nina processing');
               
@@ -320,6 +330,21 @@ async function combineAndTranscribeMessages(
           }
         }
       }
+      // Transcrição indisponível (sem token, download falhou, modelo falhou):
+      // o áudio vira um marcador explícito. Sem isto o placeholder era
+      // filtrado adiante, o combinado saía vazio, o conteúdo da mensagem era
+      // APAGADO e a Nina recebia texto vazio para responder.
+      if (!content.trim() || content === '[áudio - processando transcrição...]') {
+        content = '[áudio recebido — transcrição indisponível]';
+        // CAS: só grava o marcador se a linha AINDA estiver em placeholder.
+        // Sem a condição, uma execução concorrente cuja transcrição falhou
+        // sobrescrevia a transcrição boa que a outra acabou de gravar.
+        await supabase
+          .from('messages')
+          .update({ content })
+          .eq('id', dbMsg.id)
+          .in('content', ['', '[áudio - processando transcrição...]']);
+      }
     }
 
     if (content && content !== '[áudio - processando transcrição...]') {
@@ -404,7 +429,9 @@ async function transcribeAudio(audioBuffer: ArrayBuffer, lovableApiKey: string):
     }
 
     const result = await response.json();
-    const transcription = result.text;
+    // Whisper pode devolver só espaços (áudio mudo); trim antes do || null
+    // para whitespace não passar por transcrição válida.
+    const transcription = typeof result.text === 'string' ? result.text.trim() : '';
     
     console.log('[MessageGrouper] Transcription result:', transcription);
     return transcription || null;

@@ -122,6 +122,25 @@ describe('compileAgentPrompt', () => {
     expect(result.hasBlockingIssues).toBe(true);
   });
 
+  it('avisa quando o objetivo pede agendamento sem a ação habilitada', () => {
+    // Default de fábrica: desiredOutcomes ['schedule_meeting'] com appointments
+    // desligada — a promessa sem ferramenta merece alerta, nunca bloqueio.
+    const result = compileAgentPrompt(completeConfig());
+    expect(result.issues.map((item) => item.code)).toContain('scheduling_goal_without_action');
+    expect(result.hasBlockingIssues).toBe(false);
+
+    const withAction = completeConfig();
+    withAction.actions.find((action) => action.actionId === 'appointments')!.enabled = true;
+    expect(compileAgentPrompt(withAction).issues.map((item) => item.code))
+      .not.toContain('scheduling_goal_without_action');
+
+    const withoutGoal = completeConfig();
+    withoutGoal.identity.primaryGoals = ['answer_and_recommend'];
+    withoutGoal.salesProcess.desiredOutcomes = ['resolve_question'];
+    expect(compileAgentPrompt(withoutGoal).issues.map((item) => item.code))
+      .not.toContain('scheduling_goal_without_action');
+  });
+
   it('compila somente ações habilitadas com confirmação e política de falha', () => {
     const config = completeConfig();
     const appointments = config.actions.find((action) => action.actionId === 'appointments')!;

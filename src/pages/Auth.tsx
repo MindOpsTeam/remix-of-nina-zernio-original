@@ -21,6 +21,7 @@ import { Label } from '@/components/ui/label';
 import { useAuth } from '@/hooks/useAuth';
 import viaLogo from '@/assets/logo-via.png';
 import viaLogoWhite from '@/assets/logo-via-white.png';
+
 import './Auth.css';
 
 const emailSchema = z.string().email('Email inválido');
@@ -127,6 +128,7 @@ const Auth: React.FC = () => {
   return (
     <main className="auth-page">
       <section className="auth-story via-mesh-navy via-noise" data-on-dark aria-label="Sobre a Nina">
+
         <img src={viaLogoWhite} alt="Viver de IA" className="auth-story-logo" />
 
         <div className="auth-story-copy">

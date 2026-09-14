@@ -17,9 +17,10 @@ import {
 import {
   getActionPolicy,
   hasExplicitConfirmation,
-  validateScheduleRequest,
-} from "../_shared/action-policy.ts";
+  validateScheduleRequest, isPastInTimezone } from "../_shared/action-policy.ts";
 import { redactSensitiveText, redactSensitiveValue } from "../_shared/privacy.ts";
+import { buildIdempotencyKey } from "../_shared/action-audit.ts";
+import { resolveEmptyReplyFallback } from "../_shared/reply-fallback.ts";
 import { consumeRateLimit, RateLimitError } from "../_shared/rate-limit.ts";
 
 const corsHeaders = {
@@ -231,6 +232,15 @@ serve(async (req) => {
     for (const item of queueItems) {
       let runtimeContext: PublishedAgentRuntimeConfig | null = null;
       try {
+        // Renova o lease ANTES de cada item: num lote de 10 itens longos, o
+        // item 8 começaria com o updated_at do claim já com vários minutos —
+        // outro sweep o resgataria como "morto" enquanto ele está vivo aqui,
+        // e o lead receberia duas respostas.
+        await supabase
+          .from('nina_processing_queue')
+          .update({ updated_at: new Date().toISOString() })
+          .eq('id', item.id)
+          .eq('status', 'processing');
         // Get user_id from conversation to fetch correct settings
         const { data: conversation } = await supabase
           .from('conversations')
@@ -558,7 +568,10 @@ async function runAuditedAction(
   },
   execute: () => Promise<any>,
 ): Promise<any> {
-  const idempotencyKey = `${context.sourceMessageId}:${context.actionKey}`;
+  // A chave inclui um hash dos argumentos: duas chamadas legítimas da mesma
+  // ferramenta na mesma mensagem (dois horários consultados) não podem colidir
+  // — a colisão devolvia à segunda o resultado da primeira.
+  const idempotencyKey = buildIdempotencyKey(context.sourceMessageId, context.actionKey, context.input);
   const { data: run, error: insertError } = await supabase
     .from('agent_action_runs')
     .insert({
@@ -669,11 +682,10 @@ async function createAppointmentFromAI(
 ): Promise<any> {
   console.log('[Nina] Creating appointment from AI:', args, 'for user:', userId);
   
-  // Validate date is not in the past
-  const appointmentDate = new Date(`${args.date}T${args.time}:00`);
-  const now = new Date();
-  
-  if (appointmentDate < now) {
+  // Validate date is not in the past — na parede de relógio do fuso da agenda.
+  // new Date('...T14:30:00') sem sufixo é interpretado como UTC no Deno, o que
+  // deslocava São Paulo em 3 horas e rejeitava agendamentos válidos próximos.
+  if (isPastInTimezone(args.date, args.time, (args as any).timeZone || 'America/Sao_Paulo')) {
     console.log('[Nina] Attempted to create appointment in the past, skipping');
     return { error: 'date_in_past' };
   }
@@ -1168,6 +1180,7 @@ async function processQueueItem(
           {
             ...args,
             duration: args.duration || (appointmentPolicy.scheduling as any)?.durationMinutes,
+            timeZone: (appointmentPolicy.scheduling as any)?.timeZone,
             bufferMinutes: (appointmentPolicy.scheduling as any)?.bufferMinutes || 0,
           },
         ));
@@ -1235,20 +1248,9 @@ async function processQueueItem(
   // o item da fila e duplicaria o efeito).
   if (!aiContent) {
     console.warn('[Nina] Empty AI response received (degraded:', agentResult.degraded, '), using fallback');
-    if (appointmentCreated && !appointmentCreated.error) {
-      const brDate = typeof appointmentCreated.date === 'string'
-        ? appointmentCreated.date.split('-').reverse().join('/')
-        : null;
-      const shortTime = typeof appointmentCreated.time === 'string'
-        ? appointmentCreated.time.slice(0, 5)
-        : null;
-      const when = [brDate, shortTime].filter(Boolean).join(' às ');
-      aiContent = when
-        ? `Prontinho! Seu agendamento ficou confirmado para ${when}. Qualquer coisa é só me chamar por aqui.`
-        : 'Prontinho! Seu agendamento está confirmado. Qualquer coisa é só me chamar por aqui.';
-    } else {
-      aiContent = 'Certo! Como posso ajudar?';
-    }
+    // O fallback respeita o efeito colateral mais importante do turno: nunca
+    // reengajar quem registrou opt-out, nunca retomar conversa já transferida.
+    aiContent = resolveEmptyReplyFallback(grounding.tool_events, appointmentCreated);
   }
 
   console.log('[Nina] Final response length:', aiContent.length);

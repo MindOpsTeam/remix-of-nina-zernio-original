@@ -7,6 +7,26 @@ export { chunkContent, parseFaqPairs } from '@/domain/knowledge';
 // Tabelas novas ainda não estão nos types gerados do Supabase — cast local.
 const db = supabase as any;
 
+/**
+ * Busca todas as páginas de uma consulta. O dedupe compara no cliente (o .in()
+ * do PostgREST não escapa aspas), e o PostgREST corta a resposta em ~1000
+ * linhas — sem paginar, uma base grande deixaria o dedupe cego para o que
+ * ficou fora da primeira página e recriaria itens existentes.
+ */
+async function fetchAllRows<T>(
+  page: (from: number, to: number) => PromiseLike<{ data: unknown; error: unknown }>,
+): Promise<T[]> {
+  const pageSize = 1000;
+  const rows: T[] = [];
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await page(from, from + pageSize - 1);
+    if (error) throw error;
+    const chunk = (data ?? []) as T[];
+    rows.push(...chunk);
+    if (chunk.length < pageSize) return rows;
+  }
+}
+
 export interface KnowledgeFact {
   id: string;
   workspace_id: string;
@@ -387,14 +407,17 @@ export const knowledgeApi = {
       .filter((item) => item.question.length > 0);
     if (normalized.length === 0) return 0;
     const workspaceId = await currentWorkspaceId();
-    const questions = Array.from(new Set(normalized.map((item) => item.question)));
-    const { data: existing, error: existingError } = await db
+    // Sem .in() com texto livre: o postgrest-js não escapa aspas duplas
+    // internas, e uma pergunta com aspas gerava filtro malformado (400) —
+    // derrubando a persistência inteira. O dedupe compara no cliente.
+    const questionSet = new Set(normalized.map((item) => item.question));
+    const existing = (await fetchAllRows<{ question: string; kind: string }>((from, to) => db
       .from('unanswered_questions')
       .select('question, kind')
       .eq('workspace_id', workspaceId)
       .eq('status', 'open')
-      .in('question', questions);
-    if (existingError) throw existingError;
+      .range(from, to),
+    )).filter((item) => questionSet.has(item.question));
     const known = new Set((existing ?? []).map((item: { question: string; kind: string }) => `${item.kind}:${item.question}`));
     const rows = normalized.filter((item) => !known.has(`${item.kind ?? 'question'}:${item.question}`));
     if (rows.length === 0) return 0;
@@ -439,14 +462,16 @@ export const knowledgeApi = {
       const facts = [...byKey.values()];
       if (facts.length === 0) return;
       const workspaceId = await currentWorkspaceId();
-      const titles = Array.from(new Set(facts.map((item) => item.title)));
-      const { data: existing, error: existingError } = await db
+      // Mesmo motivo do dedupe de perguntas: título com aspas quebrava o
+      // filtro .in() do PostgREST. Busca por workspace e filtra no cliente.
+      const titleSet = new Set(facts.map((item) => item.title));
+      const existing = (await fetchAllRows<Pick<KnowledgeFact, 'id' | 'title' | 'fact' | 'category' | 'source'>>((from, to) => db
         .from('knowledge_facts')
         .select('id, title, fact, category, source')
         .eq('workspace_id', workspaceId)
-        .in('title', titles)
-        .neq('status', 'archived');
-      if (existingError) throw existingError;
+        .neq('status', 'archived')
+        .range(from, to),
+      )).filter((row) => titleSet.has(row.title));
       const known = new Map(
         ((existing ?? []) as Array<Pick<KnowledgeFact, 'id' | 'title' | 'fact' | 'category' | 'source'>>)
           .map((row) => [`${row.title}\n${row.fact}`, row]),

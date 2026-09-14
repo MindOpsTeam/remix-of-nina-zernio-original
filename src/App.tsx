@@ -14,6 +14,8 @@ import Auth from './pages/Auth';
 import ProtectedRoute from './components/ProtectedRoute';
 
 import { CompanySettingsProvider, useCompanySettings } from './hooks/useCompanySettings';
+import { DemoModeProvider } from './hooks/useDemoMode';
+
 import { AuthProvider } from './hooks/useAuth';
 import { ThemeProvider, useTheme } from './hooks/useTheme';
 import { Toaster } from 'sonner';
@@ -69,7 +71,9 @@ const App: React.FC = () => {
     <ThemeProvider>
     <AuthProvider>
       <CompanySettingsProvider>
+        <DemoModeProvider>
         <BrowserRouter>
+
           <Routes>
             {/* Public Routes */}
             <Route path="/auth" element={<Auth />} />
@@ -98,7 +102,9 @@ const App: React.FC = () => {
           </Routes>
         </BrowserRouter>
         <ThemedToaster />
+        </DemoModeProvider>
       </CompanySettingsProvider>
+
     </AuthProvider>
     </ThemeProvider>
   );
