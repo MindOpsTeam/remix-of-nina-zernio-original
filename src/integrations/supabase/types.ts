@@ -1848,6 +1848,7 @@ export type Database = {
           business_hours_start: string
           company_name: string | null
           created_at: string
+          demo_mode_enabled: boolean
           elevenlabs_api_key: string | null
           elevenlabs_model: string | null
           elevenlabs_similarity_boost: number
@@ -1900,6 +1901,7 @@ export type Database = {
           business_hours_start?: string
           company_name?: string | null
           created_at?: string
+          demo_mode_enabled?: boolean
           elevenlabs_api_key?: string | null
           elevenlabs_model?: string | null
           elevenlabs_similarity_boost?: number
@@ -1952,6 +1954,7 @@ export type Database = {
           business_hours_start?: string
           company_name?: string | null
           created_at?: string
+          demo_mode_enabled?: boolean
           elevenlabs_api_key?: string | null
           elevenlabs_model?: string | null
           elevenlabs_similarity_boost?: number
@@ -2564,6 +2567,7 @@ export type Database = {
       nina_settings_public: {
         Row: {
           company_name: string | null
+          demo_mode_enabled: boolean | null
           has_anthropic: boolean | null
           has_custom_prompt: boolean | null
           has_elevenlabs: boolean | null
@@ -2579,6 +2583,7 @@ export type Database = {
         }
         Insert: {
           company_name?: string | null
+          demo_mode_enabled?: boolean | null
           has_anthropic?: never
           has_custom_prompt?: never
           has_elevenlabs?: never
@@ -2594,6 +2599,7 @@ export type Database = {
         }
         Update: {
           company_name?: string | null
+          demo_mode_enabled?: boolean | null
           has_anthropic?: never
           has_custom_prompt?: never
           has_elevenlabs?: never
