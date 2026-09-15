@@ -155,10 +155,10 @@
   --via-text-body: var(--via-gray-700);
   --via-text-muted: var(--via-gray-600);
   --via-text-soft: var(--via-gray-500);
-  --via-border-soft: rgba(10, 59, 41, 0.08);
+  --via-border-soft: rgba(10, 31, 59, 0.08);
   --via-border-hairline: var(--via-gray-200);
   --via-edge-hi: rgba(255, 255, 255, 0.95);
-  --via-glass-ring: 1px solid rgba(10, 59, 41, 0.08);
+  --via-glass-ring: 1px solid rgba(10, 31, 59, 0.08);
   --via-glass-card: linear-gradient(
     180deg,
     rgba(255, 255, 255, 0.96) 0%,

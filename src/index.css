@@ -1,22 +1,16 @@
 /*
- * Viver de IA · Design System v0.6.1 · EDIÇÃO VERDE
+ * Viver de IA · Design System v0.6.1
  * =============================================================
  * A fonte de verdade das cores é src/styles/via-tokens.css — cópia literal
  * de src/styles/tokens.css do reference site (rafaelmilagre7/viver-de-ia-ds).
  * Atualizar o DS = recopiar aquele arquivo. Nada de editar tokens lá dentro.
  *
- * A marca trocou a família azul-navy por verde profundo. Para manter os três
- * arquivos canônicos intactos (checksum), o override completo da família
- * navy→verde vive na seção 1.5 deste arquivo, SEMPRE depois dos @imports —
- * regras fora de @layer valem mais que as dos arquivos canônicos.
- *
- * Este arquivo faz quatro coisas, nesta ordem:
+ * Este arquivo faz três coisas, nesta ordem:
  *   1. PONTE   · traduz os tokens --via-* (hex/rgba) para o contrato do
  *                shadcn/Tailwind (canais HSL crus), preservando os
  *                modificadores de opacidade (bg-primary/10, bg-card/50…).
  *                Sem os canais crus, `hsl(var(--x) / 0.1)` não compila e
  *                todo fundo translúcido do app morre.
- *   1.5 OVERRIDE · família navy/azul → verde profundo (hex + rgba + mesh).
  *   2. BASE    · reaplica as regras de elemento do DS que o preflight do
  *                Tailwind zera (body, headings, links).
  *   3. APP     · o que um dashboard precisa e um site editorial não:
@@ -38,9 +32,9 @@
 
 /* =============================================================
    1 · PONTE DE TOKENS · --via-* → contrato shadcn (HSL cru)
-   Canais HSL recoloridos: matizes azuis (h 212–223) → verdes
-   (h ~158), mesma luz/saturação. Destructive (coral) e success
-   mantidos — já eram da paleta correta.
+   Os valores abaixo são os hex canônicos do DS convertidos para
+   canais HSL. Cada linha traz o token VIA de origem no comentário:
+   se o DS mudar, a origem diz o que reconverter.
    ============================================================= */
 @layer base {
   :root {
@@ -51,25 +45,25 @@
     --via-font-mono: 'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace;
 
     --background: 0 0% 100%; /* --via-bg · white */
-    --foreground: 158 66% 13.5%; /* --via-text-primary · verde-navy #0A3B29 (espelho do navy) */
+    --foreground: 214 71% 13.5%; /* --via-text-primary · navy #0A1F3B */
     --card: 0 0% 100%; /* --via-surface */
-    --card-foreground: 158 66% 13.5%;
+    --card-foreground: 214 71% 13.5%;
     --popover: 0 0% 100%; /* --via-surface-elev */
-    --popover-foreground: 158 66% 13.5%;
-    --primary: 158 66% 13.5%; /* --via-navy · única cor de marca */
+    --popover-foreground: 214 71% 13.5%;
+    --primary: 214 71% 13.5%; /* --via-navy · única cor de marca */
     --primary-foreground: 0 0% 100%;
-    --secondary: 160 20% 97.5%; /* --via-gray-50 */
-    --secondary-foreground: 162 20% 26.7%; /* --via-gray-700 */
-    --muted: 160 17% 95.1%; /* --via-gray-100 */
-    --muted-foreground: 162 13% 36.5%; /* --via-text-muted */
+    --secondary: 220 23.1% 97.5%; /* --via-gray-50 #F7F8FA */
+    --secondary-foreground: 218 23.5% 26.7%; /* --via-gray-700 */
+    --muted: 216 20% 95.1%; /* --via-gray-100 #F0F2F5 */
+    --muted-foreground: 219 15.1% 36.5%; /* --via-text-muted #4F596B */
     /* Quarto degrau da escala de texto. Existe para que de-ênfase seja feita
        por COR, não por opacity — opacity compõe com o fundo e derruba o
        contraste. Vale o --via-text-soft e NÃO o --via-text-faint: o faint
        (gray-400) rende 2.58:1 sobre branco, reprovado em AA para texto e
        até para ícone essencial. O soft mantém a hierarquia e passa (5.21:1). */
-    --faint: 162 11% 44.5%; /* --via-text-soft */
-    --accent: 160 15% 91%; /* --via-gray-200 */
-    --accent-foreground: 158 66% 13.5%;
+    --faint: 219 12.8% 44.5%; /* --via-text-soft #636D80 */
+    --accent: 218 17.4% 91%; /* --via-gray-200 #E4E7EC */
+    --accent-foreground: 214 71% 13.5%;
     /* Coral e success levam meio ponto de luminosidade a menos que o hex
        canônico (54.1→53.6 e 33.1→32.1). Motivo: no DS eles pintam superfície
        e bolinha de presença; aqui viram TEXTO de status, e nos valores
@@ -79,32 +73,32 @@
     --destructive-foreground: 0 0% 100%;
     --success: 154 63.3% 32.1%; /* --via-success #1F8A5B · presença/estado ok */
     --success-foreground: 0 0% 100%;
-    --border: 160 15% 91%; /* --via-border-hairline · gray-200 */
-    --input: 160 14% 84.1%; /* --via-gray-300 */
-    --ring: 158 52% 24.5%; /* --via-blue · verde médio #1E5F47 */
+    --border: 218 17.4% 91%; /* --via-border-hairline · gray-200 */
+    --input: 217 16% 84.1%; /* --via-gray-300 */
+    --ring: 214 52% 24.5%; /* --via-blue #1E3A5F */
 
     /* Raio: componentes shadcn que leem --radius direto (sidebar) pegam o
        mesmo valor de `rounded-lg`, que o tailwind.config aponta pro md do
        DS — o degrau de botão/input/card pequeno. */
     --radius: var(--via-radius-md); /* 14px */
 
-    /* Sidebar · verde-navy sólido nos dois temas (a marca de pé no chrome) */
-    --sidebar-background: 158 66% 13.5%; /* --via-navy */
-    --sidebar-foreground: 160 14% 84.1%; /* --via-gray-300 */
+    /* Sidebar · navy sólido nos dois temas (a marca de pé no chrome) */
+    --sidebar-background: 214 71% 13.5%; /* --via-navy */
+    --sidebar-foreground: 217 16% 84.1%; /* --via-gray-300 */
     --sidebar-primary: 0 0% 100%;
-    --sidebar-primary-foreground: 158 66% 13.5%;
-    --sidebar-accent: 158 44.7% 29.8%; /* --via-blue-soft */
+    --sidebar-primary-foreground: 214 71% 13.5%;
+    --sidebar-accent: 212 44.7% 29.8%; /* --via-blue-soft */
     --sidebar-accent-foreground: 0 0% 100%;
-    --sidebar-border: 158 52% 24.5%; /* --via-blue */
-    --sidebar-ring: 158 27.8% 66.9%;
+    --sidebar-border: 214 52% 24.5%; /* --via-blue */
+    --sidebar-ring: 213 27.8% 66.9%;
 
     /* Data-viz · rampa monocromática do DS (--via-chart-1..5).
        Regra da casa: 3+ séries NÃO ganham cor nova — usar small multiples. */
-    --chart-1: 158 66% 13.5%;
-    --chart-2: 158 40.7% 33.7%;
-    --chart-3: 158 25.4% 49.4%;
-    --chart-4: 158 27.8% 66.9%;
-    --chart-5: 158 26.9% 81.8%;
+    --chart-1: 214 71% 13.5%;
+    --chart-2: 213 40.7% 33.7%;
+    --chart-3: 213 25.4% 49.4%;
+    --chart-4: 213 27.8% 66.9%;
+    --chart-5: 214 26.9% 81.8%;
 
     /* Profundidade do produto. O DS canônico é white-first, mas o vidro só
        aparece quando existe contraste atrás dele. Estes aliases não mudam
@@ -130,169 +124,52 @@
      resolve por [data-theme], o Tailwind por .dark — e o app usa os dois. */
   :root[data-theme='dark'],
   .dark {
-    --background: 158 40% 8%; /* --via-bg · warm dark esverdeado */
-    --foreground: 158 20% 96.9%; /* --via-text-primary #F4FAF6 */
-    --card: 158 38% 13%; /* --via-surface #142F25 */
-    --card-foreground: 158 20% 96.9%;
-    --popover: 158 36% 17.6%; /* --via-surface-elev #1C3E31 */
-    --popover-foreground: 158 20% 96.9%;
-    /* No escuro o verde-navy vira fundo, não destaque: primary sobe pra um
-       verde claro que passa AA como texto e como preenchimento. */
-    --primary: 158 30% 74.5%; /* rampa dark #A8D4BC */
-    --primary-foreground: 158 40% 8%;
-    --secondary: 158 40% 11%; /* --via-gray-50 dark #0F1F19 */
-    --secondary-foreground: 158 14% 84.1%;
-    --muted: 158 38% 15.9%; /* --via-gray-100 dark #18392D */
-    --muted-foreground: 158 15% 72.9%; /* --via-text-muted dark #AEC6BB */
-    --faint: 158 12% 66.1%; /* --via-text-faint dark · AA */
-    --accent: 158 36% 17.6%; /* --via-bg-3 */
-    --accent-foreground: 158 20% 96.9%;
+    --background: 220 48.8% 8.4%; /* --via-bg #0B1220 · warm dark */
+    --foreground: 220 37.5% 96.9%; /* --via-text-primary #F4F6FA */
+    --card: 221 43.3% 13.1%; /* --via-surface #131C30 */
+    --card-foreground: 220 37.5% 96.9%;
+    --popover: 220 40% 17.6%; /* --via-surface-elev #1B273F */
+    --popover-foreground: 220 37.5% 96.9%;
+    /* No escuro o navy vira fundo, não destaque: primary sobe pra um azul
+       claro que passa AA como texto e como preenchimento. */
+    --primary: 215 33.8% 74.5%; /* --via-chart-3 dark #A8BAD4 */
+    --primary-foreground: 220 48.8% 8.4%;
+    --secondary: 222 46.4% 11%; /* --via-gray-50 dark #0F1729 */
+    --secondary-foreground: 217 16% 84.1%;
+    --muted: 223 43.2% 15.9%; /* --via-gray-100 dark #17213A */
+    --muted-foreground: 215 17.4% 72.9%; /* --via-text-muted dark #AEB8C6 */
+    --faint: 218 14.5% 66.1%; /* --via-text-faint dark #9CA5B5 · 7.56:1, AA */
+    --accent: 220 40% 17.6%; /* --via-bg-3 */
+    --accent-foreground: 220 37.5% 96.9%;
     --destructive: 0 62.6% 75.9%; /* --via-coral-dark #E89B9B · clareia p/ legibilidade */
-    --destructive-foreground: 158 40% 8%;
+    --destructive-foreground: 220 48.8% 8.4%;
     /* O DS não redefine --via-success no escuro porque lá ele só pinta
        bolinha de presença. Aqui vira texto e ícone de estado, então
        clareia seguindo a mesma lógica de coral-dark/danger no dark. */
     --success: 154 48% 52%;
-    --success-foreground: 158 40% 8%;
-    --border: 158 36% 17.6%;
-    --input: 158 36% 22%;
-    --ring: 158 30% 74.5%;
+    --success-foreground: 220 48.8% 8.4%;
+    --border: 220 40% 17.6%;
+    --input: 220 40% 22%;
+    --ring: 215 33.8% 74.5%;
 
-    /* Sidebar mantém o verde escuro — um passo abaixo do canvas pra separar do conteúdo */
-    --sidebar-background: 158 40% 11%; /* --via-gray-50 dark */
-    --sidebar-foreground: 158 15% 72.9%;
-    --sidebar-primary: 158 30% 74.5%;
-    --sidebar-primary-foreground: 158 40% 8%;
-    --sidebar-accent: 158 36% 17.6%;
-    --sidebar-accent-foreground: 158 20% 96.9%;
-    --sidebar-border: 158 36% 17.6%;
-    --sidebar-ring: 158 30% 74.5%;
+    /* Sidebar mantém navy — um passo abaixo do canvas pra separar do conteúdo */
+    --sidebar-background: 222 46.4% 11%; /* --via-gray-50 dark */
+    --sidebar-foreground: 215 17.4% 72.9%;
+    --sidebar-primary: 215 33.8% 74.5%;
+    --sidebar-primary-foreground: 220 48.8% 8.4%;
+    --sidebar-accent: 220 40% 17.6%;
+    --sidebar-accent-foreground: 220 37.5% 96.9%;
+    --sidebar-border: 220 40% 17.6%;
+    --sidebar-ring: 215 33.8% 74.5%;
 
-    --chart-1: 158 30% 56.9%; /* --via-chart-* dark · rampa clara */
-    --chart-2: 158 32.6% 65.7%;
-    --chart-3: 158 30% 74.5%;
-    --chart-4: 158 33.3% 82.9%;
-    --chart-5: 158 37.8% 91.2%;
+    --chart-1: 214 31.8% 56.9%; /* --via-chart-* dark · rampa clara */
+    --chart-2: 215 32.6% 65.7%;
+    --chart-3: 215 33.8% 74.5%;
+    --chart-4: 215 33.3% 82.9%;
+    --chart-5: 215 37.8% 91.2%;
 
     --via-app-canvas:
       linear-gradient(180deg, var(--via-bg) 0%, var(--via-bg-2) 46%, var(--via-bg) 100%);
-  }
-}
-
-/* =============================================================
-   1.5 · OVERRIDE DE MARCA · azul-navy → verde profundo
-   =============================================================
-   Espelhos diretos dos hex canônicos do DS (mesma luz e
-   saturação, matiz ~158). Vivem FORA de @layer, depois dos
-   imports, pra valer sobre os três arquivos canônicos sem
-   editá-los. Pra voltar ao azul, basta remover esta seção.
-   ============================================================= */
-:root {
-  --via-navy:        #0A3B29;  /* era #0A1F3B · primary verde-navy */
-  --via-navy-deep:   #022A1B;  /* era #02162A */
-  --via-navy-darker: #01150D;  /* era #010B1A */
-  --via-blue:        #1E5F47;  /* era #1E3A5F · mid verde-escuro */
-  --via-blue-soft:   #2A6F56;  /* era #2A4A6E · hover/borda sobre navy */
-
-  --via-bg-soft: rgba(10, 59, 41, 0.025); /* era rgba(10, 59, 41, 0.025) */
-
-  /* Alphas da família navy · mesma escala, tinta verde */
-  --via-navy-80: rgba(10, 59, 41, 0.80);
-  --via-navy-60: rgba(10, 59, 41, 0.60);
-  --via-navy-40: rgba(10, 59, 41, 0.40);
-  --via-navy-30: rgba(10, 59, 41, 0.30);
-  --via-navy-25: rgba(10, 59, 41, 0.25);
-  --via-navy-22: rgba(10, 59, 41, 0.22);
-  --via-navy-20: rgba(10, 59, 41, 0.20);
-  --via-navy-18: rgba(10, 59, 41, 0.18);
-  --via-navy-16: rgba(10, 59, 41, 0.16);
-  --via-navy-14: rgba(10, 59, 41, 0.14);
-  --via-navy-12: rgba(10, 59, 41, 0.12);
-  --via-navy-10: rgba(10, 59, 41, 0.10);
-  --via-navy-08: rgba(10, 59, 41, 0.08);
-  --via-navy-06: rgba(10, 59, 41, 0.06);
-  --via-navy-05: rgba(10, 59, 41, 0.05);
-  --via-navy-04: rgba(10, 59, 41, 0.04);
-  --via-navy-03: rgba(10, 59, 41, 0.03);
-  --via-navy-02: rgba(10, 59, 41, 0.02);
-
-  /* Tinta de sombra no claro · era rgba(10, 59, 41, X) */
-  --via-shadow-ink-03: rgba(10, 59, 41, 0.03);
-  --via-shadow-ink-06: rgba(10, 59, 41, 0.06);
-  --via-shadow-ink-10: rgba(10, 59, 41, 0.10);
-  --via-shadow-ink-14: rgba(10, 59, 41, 0.14);
-  --via-shadow-ink-20: rgba(10, 59, 41, 0.20);
-  --via-shadow-ink-30: rgba(10, 59, 41, 0.30);
-  --via-shadow-ink-40: rgba(10, 59, 41, 0.40);
-  --via-shadow-ink-60: rgba(10, 59, 41, 0.60);
-
-  /* Glow navy → glow verde */
-  --via-glow-navy:
-    0 0 0 1px rgba(10, 59, 41, 0.05),
-    0 8px 24px rgba(10, 59, 41, 0.20),
-    0 16px 48px rgba(10, 59, 41, 0.14);
-  --via-glow-navy-strong:
-    0 0 0 1px rgba(10, 59, 41, 0.10),
-    0 16px 48px rgba(10, 59, 41, 0.30),
-    0 32px 80px rgba(10, 59, 41, 0.20);
-
-  /* Mesh light · era base cinza-azulada → cinza-esverdeada */
-  --via-mesh-light:
-    radial-gradient(ellipse 60% 70% at 12% 0%,  rgba(30, 95, 71, 0.28) 0%,  transparent 55%),
-    radial-gradient(ellipse 50% 60% at 95% 8%,  rgba(42, 111, 86, 0.22) 0%, transparent 55%),
-    radial-gradient(ellipse 70% 80% at 100% 100%, rgba(10, 59, 41, 0.30) 0%, transparent 55%),
-    radial-gradient(ellipse 50% 60% at 5% 100%, rgba(30, 95, 71, 0.18) 0%, transparent 55%),
-    linear-gradient(135deg, #CCDDD4 0%, #A7C0B4 100%);
-
-  /* Mesh navy (fundo dramático do login) · glow azul → glow verde */
-  --via-mesh-navy:
-    radial-gradient(ellipse 60% 70% at 12% 0%,  rgba(42, 111, 86, 0.55) 0%, transparent 60%),
-    radial-gradient(ellipse 50% 60% at 95% 8%,  rgba(30, 95, 71, 0.50)  0%, transparent 60%),
-    radial-gradient(ellipse 70% 80% at 100% 100%, rgba(2, 42, 27, 0.85) 0%, transparent 55%),
-    radial-gradient(ellipse 50% 60% at 5% 100%, rgba(42, 111, 86, 0.40) 0%, transparent 55%),
-    linear-gradient(135deg, #0A3B29 0%, #022A1B 100%);
-}
-
-/* Dark · surfaces azuladas → surfaces esverdeadas (espelhos diretos).
-   Os alphas navy no escuro já são rgba(white, X) e não mudam. */
-:root[data-theme='dark'],
-.dark {
-  --via-bg:           #0C1D17;  /* era #0B1220 */
-  --via-bg-2:         #142F25;  /* era #131C30 */
-  --via-bg-3:         #1C3E31;  /* era #1B273F */
-  --via-surface:      #142F25;
-  --via-surface-elev: #1C3E31;
-  --via-gray-50:      #0F241C;  /* era #0F1729 */
-  --via-gray-100:     #18392D;  /* era #17213A */
-  --via-stage-soft:   #1C3E31;  /* era #1B273F */
-  --via-stage-1:      #142F25;  /* era #131C30 */
-  --via-stage-2:      #0C1D17;  /* era #0B1220 */
-
-  --via-text-primary: #F4FAF6;  /* era #F4F6FA */
-  --via-text-body:    #D0DDD6;  /* era #D0D5DD */
-  --via-text-muted:   #AEC6BB;  /* era #AEB8C6 */
-  --via-text-faint:   #9CB5AB;  /* era #9CA5B5 */
-  --via-text:         #D0DDD6;
-  --via-text-soft:    #AEC6BB;
-  --via-ink-2:        #B4C9BF;  /* era #B4BBC9 */
-  --via-ink-3:        #AEC6BB;
-
-  /* Data-viz dark · rampa clara esverdeada */
-  --via-chart-1:     #6EB494;   /* era #6E8CB4 */
-  --via-chart-2:     #8BC4AA;   /* era #8BA3C4 */
-  --via-chart-3:     #A8D4BC;   /* era #A8BAD4 */
-  --via-chart-4:     #C5E2D2;   /* era #C5D1E2 */
-  --via-chart-5:     #E0F1E7;   /* era #E0E7F1 */
-  --via-chart-ink:   #9FD8BC;   /* era #9FBDE4 */
-  --via-chart-ink-2: #6EB494;
-}
-
-/* Fallback de dark do SO quando ainda não há tema explícito */
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme]) {
-    --via-bg:      #0C1D17;
-    --via-bg-2:    #142F25;
-    --via-surface: #142F25;
   }
 }
 
