@@ -194,7 +194,7 @@
   --via-blue:        #1E5F47;  /* era #1E3A5F · mid verde-escuro */
   --via-blue-soft:   #2A6F56;  /* era #2A4A6E · hover/borda sobre navy */
 
-  --via-bg-soft: rgba(10, 59, 41, 0.025); /* era rgba(10, 31, 59, 0.025) */
+  --via-bg-soft: rgba(10, 59, 41, 0.025); /* era rgba(10, 59, 41, 0.025) */
 
   /* Alphas da família navy · mesma escala, tinta verde */
   --via-navy-80: rgba(10, 59, 41, 0.80);
@@ -216,7 +216,7 @@
   --via-navy-03: rgba(10, 59, 41, 0.03);
   --via-navy-02: rgba(10, 59, 41, 0.02);
 
-  /* Tinta de sombra no claro · era rgba(10, 31, 59, X) */
+  /* Tinta de sombra no claro · era rgba(10, 59, 41, X) */
   --via-shadow-ink-03: rgba(10, 59, 41, 0.03);
   --via-shadow-ink-06: rgba(10, 59, 41, 0.06);
   --via-shadow-ink-10: rgba(10, 59, 41, 0.10);
