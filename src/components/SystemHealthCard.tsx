@@ -16,7 +16,7 @@ import {
   ChevronDown,
   ChevronUp
 } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
+import { invokeFunction } from '@/lib/invokeFunction';
 
 interface ValidationResult {
   component: string;
@@ -68,7 +68,7 @@ export const SystemHealthCard: React.FC = () => {
   const fetchHealth = useCallback(async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke('validate-setup');
+      const { data, error } = await invokeFunction<HealthData>('validate-setup');
       
       if (error) throw error;
       setHealthData(data);
