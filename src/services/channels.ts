@@ -20,7 +20,7 @@ export interface ZernioStatus {
 }
 
 async function invokeZernio(body: Record<string, unknown>) {
-  const { data, error } = await supabase.functions.invoke('zernio-connect', { body });
+  const { data, error } = await invokeFunction<any>('zernio-connect', { body });
   if (error) {
     // FunctionsHttpError guarda o body da resposta em context
     const ctx = (error as any)?.context;
