@@ -16,7 +16,7 @@ import {
   ChevronDown,
   ChevronUp
 } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
+import { invokeFunction } from '@/lib/invokeFunction';
 
 interface ValidationResult {
   component: string;
