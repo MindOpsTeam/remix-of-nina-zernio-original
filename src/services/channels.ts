@@ -1,4 +1,4 @@
-import { supabase } from '@/integrations/supabase/client';
+import { invokeFunction } from '@/lib/invokeFunction';
 
 export interface ChannelConnection {
   id: string;
